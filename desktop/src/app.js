@@ -1,4 +1,4 @@
-import { createRoom, W, H } from './room.js';
+import { createRoom, createPeek, W, H, PW, PH, COMFY } from './room.js';
 
 const jc = window.jc;
 const room = createRoom();
@@ -6,12 +6,17 @@ const cv = document.getElementById('room');
 const ctx = cv.getContext('2d');
 cv.width = W; cv.height = H;
 const img = ctx.createImageData(W, H);
+const peekR = createPeek();
+const peekImg = ctx.createImageData(PW, PH);
+let peek = false; // 收在屏幕边缘：false / 'left' / 'right'
+let unread = null; // 收起时收到的最后一条消息
 const input = document.getElementById('input');
 const badge = document.getElementById('badge');
 
 let scale = 2;
 let inputOpen = false; // 输入框开着吗
 let inputMode = 'msg';
+let period = 'auto'; // 房间时间：auto 或者手动指定
 let k = 2; // 每个原始像素在页面上占多少 CSS 像素
 let st = {
   me: 'cat', connected: false, configured: false, hour: new Date().getHours(),
@@ -20,17 +25,54 @@ let st = {
 };
 const partner = () => (st.me === 'cat' ? 'jelly' : 'cat');
 
+// ---------- 两个人共享的房间状态（抽屉、玩具、吃饭、电视），改了就同步给对方 ----------
+// 每一项单独记时间：两个人同时动不同的东西，谁也不会把谁的改动盖掉
+let shared = {
+  drawerOpen: false, toy: 'drawer', massage: false,
+  fastUntil: 0, tvWaitUntil: 0,
+  eat_cat: false, eat_jelly: false,
+};
+const stamp = {}; // 每一项最后修改的时间
+function updateShared(patch) {
+  const now = Date.now();
+  const entries = Object.entries(patch).map(([key, v]) => [key, v, now]);
+  applyEntries(entries);
+  jc.sendAct({ kind: 'props', entries });
+}
+function applyEntries(entries) {
+  for (const [key, v, ts] of entries || []) {
+    if (!(key in shared) || (stamp[key] || 0) > ts) continue;
+    shared[key] = v;
+    stamp[key] = ts;
+  }
+}
+const eating = () => ({ cat: shared.eat_cat, jelly: shared.eat_jelly });
+function sendAllShared() {
+  const entries = Object.keys(stamp).map((key) => [key, shared[key], stamp[key]]);
+  if (entries.length) jc.sendAct({ kind: 'props', entries });
+}
+
 // ---------- 尺寸：保证每个像素在屏幕上是整数个物理像素 ----------
 function layout() {
   const dpr = window.devicePixelRatio || 1;
   const phys = Math.max(1, Math.round(scale * dpr));
   k = phys / dpr;
-  cv.style.width = W * k + 'px';
-  cv.style.height = H * k + 'px';
-  jc.resize(Math.round(W * k), Math.round(H * k));
+  const w = peek ? PW : W, h = peek ? PH : H;
+  cv.width = w; cv.height = h;
+  cv.style.width = w * k + 'px';
+  cv.style.height = h * k + 'px';
+  for (const b of bubbles) b.el.style.display = peek ? 'none' : '';
+  jc.resize(Math.round(w * k), Math.round(h * k));
 }
-jc.getConfig().then((c) => { scale = c.scale || 2; layout(); });
+jc.onPeek((side) => {
+  peek = side || false;
+  if (peek) closeInput();
+  layout();
+  if (!peek && unread) { const u = unread; unread = null; setTimeout(() => bubble(u.who, u.text, u.url), 300); }
+});
+jc.getConfig().then((c) => { scale = c.scale || 2; period = c.period || 'auto'; layout(); });
 jc.onScale((s) => { scale = s; layout(); });
+jc.onPeriod((p) => { period = p || 'auto'; });
 window.matchMedia('(resolution: 1dppx)').addEventListener?.('change', layout);
 
 // ---------- 状态 ----------
@@ -42,10 +84,32 @@ jc.onState((s) => {
 });
 function showBadge(t) { badge.style.display = t ? 'block' : 'none'; badge.textContent = t || ''; }
 
+// ---------- 咕嘟声：发消息、收消息时轻轻响一下 ----------
+let audio = null;
+function gudu(volume = 0.07) {
+  try {
+    audio = audio || new AudioContext();
+    const now = audio.currentTime;
+    // 两个小水泡：音高从低滑到高，很短，很轻
+    [[0, 260, 620], [0.13, 340, 820]].forEach(([at, f0, f1]) => {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0, now + at);
+      o.frequency.exponentialRampToValueAtTime(f1, now + at + 0.09);
+      g.gain.setValueAtTime(0.0001, now + at);
+      g.gain.exponentialRampToValueAtTime(volume, now + at + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.12);
+      o.connect(g).connect(audio.destination);
+      o.start(now + at);
+      o.stop(now + at + 0.14);
+    });
+  } catch {}
+}
+
 // ---------- 气泡 ----------
 const bubbles = []; // { who, el, until, url }
 function bubble(who, text, url, ms) {
-  // 同一个人只留最新的一个
   for (const b of bubbles.filter((b) => b.who === who)) removeBubble(b);
   const el = document.createElement('div');
   el.className = 'bubble' + (url ? ' link' : '');
@@ -63,7 +127,6 @@ function removeBubble(b) {
   b.el.classList.add('fade');
   setTimeout(() => b.el.remove(), 300);
 }
-// 角色不在家时，气泡挂在它房间的中间
 const FALLBACK = { cat: [74, 95], jelly: [116, 85] };
 function anchor(who) { return room.heads[who] || FALLBACK[who]; }
 function placeBubbles() {
@@ -71,8 +134,7 @@ function placeBubbles() {
   for (const b of [...bubbles]) {
     if (now > b.until) { removeBubble(b); continue; }
     let [x, y] = anchor(b.who);
-    // 一起看电视时两只挨得很近，气泡往各自外侧让一让，别挡住电视
-    if (st.cat.together && room.heads[b.who]) x += b.who === 'cat' ? -10 : 10;
+    if ((st.cat.together || shared.massage) && room.heads[b.who]) x += b.who === 'cat' ? -10 : 10;
     const r = b.el.getBoundingClientRect();
     const half = r.width / 2;
     const left = Math.min(Math.max(x * k, half + 2), W * k - half - 2);
@@ -88,9 +150,20 @@ function placeBubbles() {
 
 jc.onMsg((m) => {
   if (m.poke) { hearts.push({ who: m.target || st.me, t0: performance.now() }); return; }
-  if (m.text) bubble(m.who, m.text, m.url);
+  if (m.text) {
+    if (peek && m.who !== st.me) unread = m; // 收着的时候先记下，展开再冒出来
+    else bubble(m.who, m.text, m.url);
+    if (m.who !== st.me) gudu();
+  }
 });
 jc.onLocalBubble((m) => bubble(m.who, m.text));
+jc.onAct((a) => {
+  if (a.kind === 'props') applyEntries(a.entries);
+  if (a.kind === 'comfy') bubble('cat', a.text, null, 2500);
+  if (a.kind === 'tv' && a.from !== st.me) bubble(a.from, '📺 一起看 B 站吧', null, 4000);
+});
+// TA 刚上线：把房间现在的样子告诉 TA
+jc.onPeerOnline(sendAllShared);
 
 // ---------- 戳一戳的小爱心 ----------
 const hearts = [];
@@ -117,35 +190,68 @@ function drawHearts(buf, now) {
 }
 
 // ---------- 画 ----------
+let drag = null; // 正在拖的道具 { item, x, y }
 function frame() {
   const now = performance.now();
+  if (peek) {
+    peekImg.data.set(peekR.render({ cat: st.cat, jelly: st.jelly, unread: !!unread, side: peek }, now));
+    ctx.putImageData(peekImg, 0, 0);
+    return;
+  }
+  const wall = Date.now();
   st.hour = new Date().getHours();
-  const buf = room.render(st, now);
+  const props = {
+    drawerOpen: shared.drawerOpen,
+    toy: drag && drag.item === 'toy' ? 'drag' : shared.toy,
+    massage: shared.massage,
+    fast: wall < shared.fastUntil,
+    eating: eating(),
+    tvWait: wall < shared.tvWaitUntil && !st.cat.together,
+    drag,
+  };
+  const buf = room.render({ ...st, period: period === 'auto' ? null : period, props }, now);
   drawHearts(buf, now);
   img.data.set(buf);
   ctx.putImageData(img, 0, 0);
   placeBubbles();
 }
-setInterval(frame, 50); // 20 帧，像素画够了，也省电
+setInterval(frame, 50);
 frame();
 
-// ---------- 鼠标：只在房间上接住鼠标，透明的地方点穿 ----------
+// ---------- 鼠标 ----------
+// 透明的地方点穿；房间上可以拖动窗口；道具（猫粮、硅胶棒）可以拖着走
 let solid = null;
 function setSolid(s) { if (s !== solid) { solid = s; jc.setSolid(s); } }
 let down = null;
 
-function hitAt(e) { return room.hitTest(e.clientX / k, e.clientY / k); }
+const px = (e) => [e.clientX / k, e.clientY / k];
+function hitAt(e) {
+  const [x, y] = px(e);
+  if (peek) { // 收起时：碰到小脑袋就算
+    const xi = x | 0, yi = y | 0;
+    return xi >= 0 && yi >= 0 && xi < PW && yi < PH && peekR.buf[(yi * PW + xi) * 4 + 3] > 20 ? 'peek' : null;
+  }
+  return room.hitTest(x, y);
+}
+const myBowl = () => (st.me === 'cat' ? 'bowlCat' : 'bowlJelly');
 
 window.addEventListener('mousemove', (e) => {
   if (down) {
-    if (!down.dragging && Math.hypot(e.screenX - down.x, e.screenY - down.y) > 3) { down.dragging = true; jc.dragStart(); }
+    if (down.peekOnly) return; // 收起时只能点，不能拖
+    const moved = Math.hypot(e.screenX - down.x, e.screenY - down.y) > 3;
+    if (down.prop) {
+      if (moved || drag) { const [x, y] = px(e); drag = { item: down.prop, x, y }; }
+      return;
+    }
+    if (!down.dragging && moved) { down.dragging = true; jc.dragStart(); }
     if (down.dragging) jc.dragMove();
     return;
   }
   const overUi = e.target !== cv && e.target !== document.body && e.target !== document.documentElement;
   const hit = hitAt(e);
   setSolid(!!hit || overUi || inputOpen);
-  cv.style.cursor = hit === st.me || hit === partner() ? 'pointer' : hit ? 'grab' : 'default';
+  const clicky = ['cat', 'jelly', 'tv', 'drawer', 'toy', 'bag', 'bowlCat', 'bowlJelly'];
+  cv.style.cursor = clicky.includes(hit) ? 'pointer' : hit ? 'grab' : 'default';
 });
 document.addEventListener('mouseleave', () => { if (!down && !inputOpen) setSolid(false); });
 
@@ -153,17 +259,81 @@ cv.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
   const hit = hitAt(e);
   if (!hit) return;
-  down = { x: e.screenX, y: e.screenY, hit, dragging: false };
+  let prop = null;
+  if (peek) { down = { x: e.screenX, y: e.screenY, hit, prop: null, dragging: false, peekOnly: true }; return; }
+  if (hit === 'bag') prop = 'bag';
+  if (hit === 'toy' && shared.drawerOpen && shared.toy === 'drawer') prop = 'toy';
+  down = { x: e.screenX, y: e.screenY, hit, prop, dragging: false };
 });
+
 window.addEventListener('mouseup', (e) => {
   if (!down) return;
   const d = down;
   down = null;
+  if (d.prop && drag) { dropProp(drag, e); drag = null; return; }
+  drag = null;
   if (d.dragging) { jc.dragEnd(); return; }
-  if (d.hit === st.me) openInput('msg');
-  else if (d.hit === partner() && st[partner()].online) {
+  if (d.hit === 'peek') { jc.unpeek(); return; } // 点一下展开
+  click(d.hit);
+});
+
+function dropProp(dr, e) {
+  const hit = hitAt(e);
+  if (dr.item === 'bag') {
+    // 只能倒进自己的碗
+    const spot = room.spots[myBowl()];
+    const near = spot && Math.hypot(dr.x - spot[0], dr.y - spot[1]) < 9;
+    if (hit === myBowl() || near) {
+      updateShared({ ['eat_' + st.me]: true });
+      bubble(st.me, '🍚 去吃饭啦', null, 3000);
+    }
+    return;
+  }
+  if (dr.item === 'toy') {
+    const j = room.heads.jelly;
+    const nearJelly = j && Math.hypot(dr.x - j[0], dr.y - (j[1] + 8)) < 12;
+    if (hit === 'jelly' || nearJelly) {
+      if (!(st.cat.online && st.jelly.online)) { bubble(st.me, '要等 TA 也在线哦', null, 2500); return; }
+      updateShared({ toy: 'jelly', massage: true, eat_cat: false, eat_jelly: false });
+    }
+  }
+}
+
+function click(hit) {
+  if (hit === 'drawer') {
+    // 抽屉：开着的时候再点一下，一切恢复原样
+    if (shared.drawerOpen) updateShared({ drawerOpen: false, toy: 'drawer', massage: false });
+    else updateShared({ drawerOpen: true });
+    return;
+  }
+  if (shared.massage && (hit === 'jelly' || hit === 'toy')) {
+    updateShared({ fastUntil: Date.now() + 3000 }); // 加速一会儿
+    return;
+  }
+  if (shared.massage && hit === 'cat') {
+    const text = COMFY[Math.floor(Math.random() * COMFY.length)];
+    bubble('cat', text, null, 2500);
+    jc.sendAct({ kind: 'comfy', text });
+    return;
+  }
+  if (hit === st.me) openInput('msg');
+  else if (hit === partner() && st[partner()].online) {
     hearts.push({ who: partner(), t0: performance.now() });
     jc.poke();
+  }
+}
+
+cv.addEventListener('dblclick', (e) => {
+  const hit = hitAt(e);
+  if (hit === 'tv') {
+    // 双击电视：两个人的 Chrome 都打开 B 站，两只先去电视前等着
+    updateShared({ tvWaitUntil: Date.now() + 120000 });
+    jc.tvTogether();
+    bubble(st.me, '📺 一起看 B 站吧', null, 4000);
+  }
+  if (hit === myBowl() && shared['eat_' + st.me]) {
+    updateShared({ ['eat_' + st.me]: false });
+    bubble(st.me, '吃饱啦～', null, 2500);
   }
 });
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); jc.menu(); });
@@ -197,8 +367,12 @@ input.addEventListener('keydown', (e) => {
     } else {
       jc.sendMsg(v);
       bubble(st.me, v);
+      gudu(0.04);
     }
   }
   closeInput();
 });
 input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) closeInput(); }, 100));
+
+// 给自动化测试用的入口（不影响正常使用）
+window.__jc = { click, dropProp, updateShared, shared: () => shared, room, st: () => st, peek: () => peek };

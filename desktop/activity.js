@@ -9,6 +9,8 @@ const AI_APPS = [
   [/kimi/i, 'kimi'],
   [/doubao|豆包/i, 'doubao'],
 ];
+const EDIT = [/剪映|capcut|jianying|videofusion|^com\.lemon\.lv/i];
+const WECHAT = [/^wechat$|微信|^weixin$|com\.tencent\.xinwechat/i];
 const MEETING = [/wemeet|腾讯会议|tencentmeeting|voovmeeting|zoom|teams|lark|feishu|飞书/i];
 const GAMES = [
   /-win64-shipping/i, // 虚幻引擎游戏的通用进程名
@@ -26,6 +28,8 @@ function classify(name, bundle, extraGames = []) {
   if (!n) return null;
   if (BROWSERS.includes(lower) || /chrome|edge|firefox/i.test(bundle || '')) return 'browser';
   for (const [re, act] of AI_APPS) if (re.test(n)) return act;
+  if (EDIT.some((re) => re.test(n) || re.test(bundle || ''))) return 'edit';
+  if (WECHAT.some((re) => re.test(n) || re.test(bundle || ''))) return 'wechat';
   if (MEETING.some((re) => re.test(n) || re.test(bundle || ''))) return 'meeting';
   if (extraGames.some((g) => g && lower.includes(String(g).toLowerCase()))) return 'game';
   if (GAMES.some((re) => re.test(n) || re.test(bundle || ''))) return 'game';

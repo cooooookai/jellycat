@@ -230,6 +230,10 @@
   }
 
   setInterval(tick, 1000);
+  // 每秒告诉后台：这个页面在不在播放、播到哪（一起看模式用来判断"开播满 3 秒"）
+  setInterval(() => {
+    if (video && key) post({ t: 'state', key, playing: !video.paused && video.readyState >= 2, time: video.currentTime });
+  }, 1000);
   setInterval(() => {
     if (leader && video && key && !myBuffering) post({ t: 'hb', key, ...snap() });
   }, HB_MS);

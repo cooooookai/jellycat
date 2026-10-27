@@ -153,7 +153,14 @@ function onServer(m) {
     case 'msg':
       if (m.from !== cfg.who) { partner.msg = { text: String(m.text || '').slice(0, 200), at: Date.now() }; pushStatus(); }
       break;
+    case 'act':
+      if (m.kind === 'tv') openTv(); // 有人双击了小房间里的电视
+      break;
     case 'invite':
+      if (m.kind === 'auto') { // TA 那边开播了：一起看模式下直接跟过去
+        if (Date.now() < watchUntil && !(myPage && m.page && myPage.key === m.page.key)) gotoPage(m.page, m.time, true);
+        break;
+      }
       if (m.kind && m.kind !== 'watch') break; // 开会邀请交给桌面端
       partner.invite = { page: m.page, at: Date.now() };
       if (m.page) {
@@ -190,6 +197,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!entry) return;
     switch (m.t) {
       case 'page': {
+        if ((m.page ? m.page.key : null) !== entry.key) entry.pageAt = Date.now();
         entry.key = m.page ? m.page.key : null;
         entry.page = m.page;
         // 当前标签页、正在播放、或者我原来那个标签页换了视频 → 它就是"我在看的"
@@ -203,6 +211,10 @@ chrome.runtime.onConnect.addListener((port) => {
       case 'buf':
         if (m.t === 'ctl' && myTabId !== tabId) setMyTab(tabId);
         toPartner(m);
+        break;
+      case 'state': // 这个标签页的播放状态（只留在本地）
+        entry.last = { playing: m.playing, time: m.time, at: Date.now() };
+        if (m.playing && Date.now() < watchUntil) maybeShare(tabId, m);
         break;
     }
   });
@@ -225,9 +237,47 @@ function setMyTab(tabId) {
   if (changed) { toPartner({ t: 'page', page: myPage }); pushStatus(); }
 }
 
-// 一键去 TA 那里
-async function gotoPage(page) {
+// ---------- 双击电视 → 一起看模式 ----------
+// 两边的浏览器都打开 B 站；谁先播放一个视频满 3 秒，对方就自动打开同一个视频、同一个进度
+let watchUntil = 0;
+let watchStart = 0;
+let tvTabId = null;
+let sharedKey = null;
+let shareTimer = null;
+
+async function openTv() {
+  watchStart = Date.now();
+  watchUntil = watchStart + 10 * 60 * 1000;
+  sharedKey = null;
+  try {
+    const tab = await chrome.tabs.create({ url: 'https://www.bilibili.com/', active: true });
+    tvTabId = tab.id;
+    await chrome.windows.update(tab.windowId, { focused: true });
+  } catch {}
+}
+
+function maybeShare(tabId, m) {
+  const entry = ports.get(tabId);
+  if (!entry || !entry.page || !m.key || m.key === sharedKey || shareTimer) return;
+  if (!(entry.pageAt >= watchStart)) return; // 只看双击电视之后新打开的视频，旧标签页里在放的不算
+  if (partner.page && partner.page.key === m.key) { sharedKey = m.key; return; } // TA 已经在看这个了
+  const key = m.key;
+  shareTimer = setTimeout(() => {
+    shareTimer = null;
+    const e = ports.get(tabId);
+    if (!e || !e.page || e.page.key !== key || !e.last || !e.last.playing || Date.now() - e.last.at > 2500) return;
+    sharedKey = key;
+    if (myTabId !== tabId) setMyTab(tabId);
+    toPartner({ t: 'invite', kind: 'auto', page: e.page, time: e.last.time });
+  }, 3000);
+}
+
+// 一键去 TA 那里（time：从第几秒开始；useTv：用一起看模式打开的那个标签页）
+async function gotoPage(page, time, useTv) {
   if (!page || !page.url) return;
+  let url = page.url;
+  if (time != null) { try { const u = new URL(url); u.searchParams.set('t', String(Math.floor(time))); url = u.toString(); } catch {} }
+  if (useTv) sharedKey = page.key;
   // 已经开着同一个视频就直接切过去
   for (const [tabId, e] of ports) {
     if (e.key && e.key === page.key) {
@@ -238,7 +288,14 @@ async function gotoPage(page) {
       return;
     }
   }
-  const tab = await chrome.tabs.create({ url: page.url, active: true });
+  if (useTv && tvTabId != null) {
+    try {
+      const tab = await chrome.tabs.update(tvTabId, { url, active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return;
+    } catch { tvTabId = null; }
+  }
+  const tab = await chrome.tabs.create({ url, active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
   // 页面加载后，内容脚本会自己来要进度（fresh=true）
 }

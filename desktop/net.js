@@ -96,6 +96,7 @@ class Link extends EventEmitter {
         const id = `${m.who}:${m.dev}`;
         if (m.online) this.devices.set(id, { who: m.who, dev: m.dev, page: m.page || null, activity: m.activity || null });
         else this.devices.delete(id);
+        if (m.online && m.dev === 'desk') this.emit('peer-online', m.who);
         this.emit('change');
         break;
       }
@@ -113,6 +114,9 @@ class Link extends EventEmitter {
         break;
       case 'invite':
         this.emit('invite', m);
+        break;
+      case 'act':
+        this.emit('act', m);
         break;
     }
   }

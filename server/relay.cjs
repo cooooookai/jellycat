@@ -13,7 +13,7 @@ const rooms = new Map(); // room -> { secret, clients: Map<"who:dev", ws> }
 // 只发给"另一个人"的消息（看视频同步、邀请）
 const TO_PARTNER = new Set(['ctl', 'hb', 'buf', 'need', 'invite']);
 // 发给房间里所有其他设备的消息（包括自己的另一台设备）
-const TO_ALL = new Set(['page', 'activity', 'msg']);
+const TO_ALL = new Set(['page', 'activity', 'msg', 'act']);
 
 const server = http.createServer((req, res) => {
   // 健康检查：在浏览器里打开 http(s)://你的服务器/ 能看到 ok，说明网络通

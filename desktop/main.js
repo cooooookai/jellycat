@@ -22,7 +22,7 @@ const CFG_FILE = () => path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CFG = {
   server: '', room: '', secret: '', who: 'cat',
   hostServer: false, // 这台电脑自己当服务器（同一个 Wi-Fi 下用）
-  scale: 2, hideInGame: true, games: [], x: null, y: null,
+  scale: 2, hideInGame: true, games: [], x: null, y: null, period: 'auto',
 };
 let cfg = { ...DEFAULT_CFG };
 function loadCfg() { try { cfg = { ...DEFAULT_CFG, ...JSON.parse(fs.readFileSync(CFG_FILE(), 'utf8')) }; } catch {} }
@@ -213,6 +213,8 @@ function menuTemplate() {
     { label: page ? `叫 TA 一起看：${trim(page.title || page.url, 18)}` : '叫 TA 一起看（先在 Chrome 打开 B 站视频）', enabled: !!page && link.connected, click: () => inviteWatch() },
     { label: '叫 TA 开会…', enabled: link.connected, click: () => win && win.webContents.send('input', { mode: 'meeting', prefill: meetingFromClipboard() }) },
     { type: 'separator' },
+    { label: '房间时间', submenu: [['auto', '跟着真实时间'], ['dawn', '清晨'], ['day', '白天'], ['dusk', '黄昏'], ['night', '夜晚'], ['late', '深夜']]
+      .map(([v, l]) => ({ label: l, type: 'radio', checked: (cfg.period || 'auto') === v, click: () => { cfg.period = v; saveCfg(); win && win.webContents.send('period', v); } })) },
     { label: '大小', submenu: [1, 1.5, 2, 3].map((s) => ({ label: s + '×', type: 'radio', checked: cfg.scale === s, click: () => setScale(s) })) },
     { label: '打游戏时自动藏起来', type: 'checkbox', checked: cfg.hideInGame, click: (i) => { cfg.hideInGame = i.checked; saveCfg(); applyGameHide(); } },
     { label: '设置…', click: openSettings },
@@ -256,6 +258,18 @@ link.on('msg', (m) => {
   win.webContents.send('msg', { who: m.from, text: m.text, poke: m.poke, target: m.target });
   if (m.from !== cfg.who && !m.poke && !win.isVisible()) notify(`${NAME[m.from]}`, m.text);
 });
+// 房间里的互动（抽屉、吃饭、电视……）：两个人的小房间保持一样
+link.on('act', (m) => {
+  if (win) win.webContents.send('act', m);
+  if (m.kind === 'tv') openBiliIfNoExtension();
+});
+link.on('peer-online', (who) => { if (who !== cfg.who && win) win.webContents.send('peer-online'); });
+
+// 双击电视：插件开着就交给插件打开 B 站；没装插件就用默认浏览器打开
+function openBiliIfNoExtension() {
+  if (!link.dev(cfg.who, 'ext')) shell.openExternal('https://www.bilibili.com/');
+}
+
 link.on('invite', (m) => {
   if (m.from === cfg.who) return;
   if (m.kind === 'meeting' && m.url) {
@@ -289,13 +303,50 @@ ipcMain.on('drag-move', () => {
   const c = screen.getCursorScreenPoint();
   win.setPosition(Math.round(c.x - drag.dx), Math.round(c.y - drag.dy));
 });
-ipcMain.on('drag-end', () => { drag = null; ensureOnScreen(); });
+ipcMain.on('drag-end', () => {
+  drag = null;
+  // 拖到屏幕右边缘：收起来，只剩两只从边上探头
+  if (win && !peeking) {
+    const b = win.getBounds();
+    const d = screen.getDisplayMatching(b).workArea;
+    if (b.x + b.width >= d.x + d.width - 6) { collapse(b, 'right'); return; }
+    if (b.x <= d.x + 6) { collapse(b, 'left'); return; }
+  }
+  ensureOnScreen();
+});
+
+// ---------- 收到屏幕边缘 ----------
+let peeking = false;
+let peekFrom = null; // 收起前的位置
+let restoreTo = null;
+function collapse(b, side) {
+  peeking = side;
+  peekFrom = b;
+  win.webContents.send('peek', side);
+}
+ipcMain.on('unpeek', () => {
+  if (!win || !peeking) return;
+  peeking = false;
+  const d = screen.getDisplayMatching(win.getBounds()).workArea;
+  const from = peekFrom || win.getBounds();
+  // 展开回原来的高度，离右边留一点空，不会又立刻收起来
+  restoreTo = { x: Math.min(Math.max(from.x, d.x + 16), d.x + d.width - from.width - 16), y: from.y };
+  win.webContents.send('peek', false);
+});
 ipcMain.on('menu', () => { if (win) Menu.buildFromTemplate(menuTemplate()).popup({ window: win }); });
 ipcMain.on('resize', (e, { w, h }) => {
   if (!win) return;
   const b = win.getBounds();
   // 以右下角为锚点缩放，房间不会"跳走"
-  const nx = b.x + b.width - w, ny = b.y + b.height - h;
+  let nx = b.x + b.width - w, ny = b.y + b.height - h;
+  if (peeking) { // 收起：贴着屏幕右边，高度对着原来房间的中间
+    const d = screen.getDisplayMatching(b).workArea;
+    const from = peekFrom || b;
+    nx = peeking === 'left' ? d.x : d.x + d.width - w;
+    ny = Math.min(Math.max(from.y + from.height / 2 - h / 2, d.y), d.y + d.height - h);
+  } else if (restoreTo) {
+    nx = restoreTo.x; ny = restoreTo.y; restoreTo = null;
+  }
   win.setResizable(true);
   win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: Math.round(w), height: Math.round(h) });
   win.setResizable(false);
@@ -304,6 +355,8 @@ ipcMain.on('send-msg', (e, text) => {
   text = String(text || '').trim().slice(0, 200);
   if (text) link.send({ t: 'msg', text });
 });
+ipcMain.on('send-act', (e, a) => { if (a && typeof a.kind === 'string') link.send({ t: 'act', ...a }); });
+ipcMain.on('tv-together', () => { link.send({ t: 'act', kind: 'tv' }); openBiliIfNoExtension(); });
 ipcMain.on('poke', () => link.send({ t: 'msg', poke: true, target: other(cfg.who), text: '' }));
 ipcMain.on('send-meeting', (e, url) => {
   url = String(url || '').trim();
@@ -398,6 +451,8 @@ app.whenReady().then(() => {
   restart();
   if (!cfg.room || !cfg.secret) openSettings();
 
+  // 测试用：自动收到边缘
+  if (process.env.JC_TEST_PEEK) setTimeout(() => collapse(win.getBounds(), process.env.JC_TEST_PEEK), 2500);
   // 测试用：过几秒截一张图就退出
   if (process.env.JC_SNAPSHOT) {
     setTimeout(async () => {

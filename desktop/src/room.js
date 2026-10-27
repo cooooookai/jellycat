@@ -24,8 +24,10 @@ function hash(x, y) {
 
 // ---------- 画布 ----------
 class Px {
-  constructor(buf) { this.b = buf; this.hit = new Uint8Array(W * H); }
-  clear() { this.b.fill(0); this.hit.fill(0); }
+  constructor(buf) { this.b = buf; this.hit = new Uint8Array(W * H); this.emit = new Uint8Array(W * H); this.em = false; this.lights = []; }
+  clear() { this.b.fill(0); this.hit.fill(0); this.emit.fill(0); this.lights.length = 0; }
+  // 发光的东西（屏幕、灯泡）画的时候打开 em，压暗天色时它们不变暗
+  glowing(fn) { this.em = true; try { fn(); } finally { this.em = false; } }
   set(x, y, c, a = 1, tag = 0) {
     x |= 0; y |= 0;
     if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -39,6 +41,7 @@ class Px {
       b[i + 3] = na * 255;
     }
     if (tag) this.hit[y * W + x] = tag;
+    if (this.em) this.emit[y * W + x] = 1;
   }
   get(x, y) { const i = (y * W + x) * 4; return [this.b[i], this.b[i + 1], this.b[i + 2], this.b[i + 3]]; }
   // 扫描线填多边形，fn(px,py) 返回颜色或 null
@@ -278,12 +281,71 @@ const NPC = {
   },
 };
 
-// ---------- 主题（以后的节日房间、季节房间都在这里加一套颜色和装饰） ----------
+// ---------- 新住客：剪映和微信 ----------
+NPC.edit = { // 剪映：一块小场记板，咔嗒咔嗒
+  pal: { k: hex('#22222a'), w: hex('#f2f2f2'), y: hex('#f7d046') },
+  frames: [
+    ['.wkwkwkw', 'kwkwkwk.', 'kkkkkkkk', 'kywwwwyk', 'kkkkkkkk'],
+    ['........', 'wkwkwkwk', 'kkkkkkkk', 'kywwwwyk', 'kkkkkkkk'],
+  ],
+};
+NPC.wechat = { // 微信：一个绿色的小聊天气泡
+  pal: { g: hex('#2ac25b'), G: hex('#1f9e49'), w: hex('#ffffff') },
+  frames: [
+    ['.gggggg.', 'gggggggg', 'gwggwggw', 'gggggggg', '.gggggg.', '..G.....'],
+    ['........', '.gggggg.', 'gggggggg', 'gwggwggw', 'gggggggg', '.ggggGg.'],
+  ],
+};
+
+// 仰面躺着的小黑猫（按摩时）
+const CAT_BELLY = [
+  [
+    '..k..k...k..k...',
+    '..k..k...k..k...',
+    '.kkkkkkkkkkkkkK.',
+    'kkKKKKKKKKkkkkkK',
+    'kkKKKKKKKKkkpkpk',
+    '.kkkkkkkkkkkkkk.',
+    'kk.........kk...',
+  ],
+  [
+    '...k..k..k..k...',
+    '..k..k...k..k...',
+    '.kkkkkkkkkkkkkK.',
+    'kkKKKKKKKKkkkkkK',
+    'kkKKKKKKKKkkpkpk',
+    '.kkkkkkkkkkkkkk.',
+    '.kk........kk...',
+  ],
+];
+// 软软的肉色硅胶圆柱
+const TOY = ['.ss.', 'shss', 'shss', 'shss', 'shss', 'shss', 'shss', 'ssss', 'dddd'];
+const TOY_PAL = { s: hex('#f1bfa4'), h: hex('#fbe0d0'), d: hex('#d49a80') };
+// 猫粮袋
+const BAG = [
+  '.bbbbbb.',
+  'bBBBBBBb',
+  'bowwwwob',
+  'bowfffwb',
+  'bowwwwob',
+  'boooooob',
+  'boooooob',
+  'bbbbbbbb',
+];
+const BAG_PAL = { b: hex('#8a4b2a'), B: hex('#b0663a'), o: hex('#e8914a'), w: hex('#fff4e0'), f: hex('#5d8fc9') };
+const KIBBLE = [hex('#a8642f'), hex('#c47a3a'), hex('#8e5228')];
+export const COMFY = ['呼噜噜…', '舒服～', '(=^･ω･^=)', 'ฅ^•ﻌ•^ฅ', '(ˊ˘ˋ*)♡', '再用力一点点…', '咕噜咕噜', '好舒服喵'];
+
+// 命中区编号
+export const TAG = { cat: 1, jelly: 2, npc: 3, tv: 4, drawer: 5, toy: 6, bag: 7, bowlCat: 8, bowlJelly: 9 };
+const TAG_NAME = Object.fromEntries(Object.entries(TAG).map(([k, v]) => [v, k]));
+
+// ---------- 主题：房间的基本配色 ----------
 export const THEMES = {
   cozy: {
     name: '小家',
-    wallA: hex('#6f9f92'), wallB: hex('#65958a'), // 左墙竖条纹
-    backA: hex('#7aa69a'), backB: hex('#70998e'), // 后墙
+    wallA: hex('#6f9f92'), wallB: hex('#65958a'),
+    backA: hex('#7aa69a'), backB: hex('#70998e'),
     base: hex('#5a3d2c'), baseTop: hex('#7a553c'),
     woodA: hex('#b07444'), woodB: hex('#a46a3d'), woodSeam: hex('#7d4e2c'), woodHi: hex('#c0854f'),
     rugA: hex('#8c5a8f'), rugB: hex('#7d4f80'), rugEdge: hex('#f0d9a8'),
@@ -291,17 +353,37 @@ export const THEMES = {
   },
 };
 
+// ---------- 五个时段：同一个房间，光线和小物件不一样 ----------
+export const PERIODS = {
+  dawn: { name: '清晨', tint: [255, 196, 170], a: 0.1, lights: false, lamp: false, curtains: 'half', sky: 'dawn', mugSteam: true },
+  day: { name: '白天', tint: null, a: 0, lights: false, lamp: false, curtains: 'open', sky: 'day', sun: true },
+  dusk: { name: '黄昏', tint: [255, 140, 80], a: 0.14, lights: true, lamp: true, curtains: 'open', sky: 'dusk', sunset: true },
+  night: { name: '夜晚', tint: [30, 30, 95], a: 0.32, lights: true, lamp: true, curtains: 'open', sky: 'night' },
+  late: { name: '深夜', tint: [8, 10, 36], a: 0.55, lights: false, lamp: false, curtains: 'closed', sky: 'night', nightlight: true, moonbeam: true },
+};
+export function periodOf(h) {
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 16) return 'day';
+  if (h >= 16 && h < 19) return 'dusk';
+  if (h >= 19 && h < 23) return 'night';
+  return 'late';
+}
+
 // ---------- 房间布局 ----------
 // 一个 96×96 的房间。左墙 x = 0，后墙 y = 0，最里面的墙角放电视。
-// 猫的书桌靠左墙，水母的书桌靠后墙；一起看的时候两只都挪到电视前的地毯上。
 const SPOTS = {
-  cat: { desk: [22, 55, 0], tv: [26, 38, 0], sleep: [24, 82, 3], idle: [42, 68, 0] },
-  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14] },
+  cat: { desk: [22, 55, 0], tv: [26, 38, 0], sleep: [24, 82, 3], idle: [42, 68, 0], eat: [34, 83, 0], massage: [36, 40, 0] },
+  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14], eat: [80, 19, 6], massage: [38, 42, 7] },
 };
+const BOWL = { cat: [38, 88], jelly: [76, 15] };
+const DRAWER = { x: 0, y: 72, w: 10, d: 10, h: 12 };
+const BAG_AT = [91, 5];
 
-function stationFor(s) {
+function stationFor(s, who, props) {
   if (!s.online || s.activity === 'away' || s.activity === 'gone') return null;
-  if (s.together) return 'tv';
+  if (props.massage) return 'massage';
+  if (props.eating && props.eating[who]) return 'eat';
+  if (s.together || props.tvWait) return 'tv';
   if (s.activity === 'sleep') return 'sleep';
   if (s.activity) return 'desk';
   return 'idle';
@@ -309,6 +391,7 @@ function stationFor(s) {
 
 // 显示器内容
 function screenColor(act, t, u, v) {
+  const text = (fg, bg, k = 0.6) => (v * 8 % 2 < 1 && u < 0.2 + hash(Math.floor(v * 8), Math.floor(t / 700)) * k ? hex(fg) : hex(bg));
   switch (act) {
     case 'bili': {
       const f = Math.floor(t / 300) % 2;
@@ -321,10 +404,24 @@ function screenColor(act, t, u, v) {
     }
     case 'meeting':
       return (u * 2 | 0) + (v * 2 | 0) * 2 === Math.floor(t / 1200) % 4 ? hex('#8ee6a8') : hex('#3c5b74');
-    case 'claude': return v * 8 % 2 < 1 && u < 0.3 + hash(Math.floor(v * 8), Math.floor(t / 700)) * 0.6 ? hex('#f3c5a8') : hex('#2b2421');
-    case 'gpt': return v * 8 % 2 < 1 && u < 0.2 + hash(Math.floor(v * 8), Math.floor(t / 700)) * 0.7 ? hex('#e8e8e8') : hex('#262626');
-    case 'kimi': return v * 8 % 2 < 1 && u < 0.2 + hash(Math.floor(v * 8), Math.floor(t / 700)) * 0.7 ? hex('#9cc0ff') : hex('#1a1d2b');
-    case 'doubao': return v * 8 % 2 < 1 && u < 0.2 + hash(Math.floor(v * 8), Math.floor(t / 700)) * 0.7 ? hex('#c9b8ff') : hex('#24203a');
+    case 'edit': { // 剪映：上面是预览画面，下面是彩色的剪辑轨道，播放头在走
+      if (v < 0.45) return hash(Math.floor(u * 4), Math.floor(t / 900)) > 0.5 ? hex('#7fb6d9') : hex('#e9a0b8');
+      const head = (t / 2500) % 1;
+      if (Math.abs(u - head) < 0.06) return hex('#ffffff');
+      const track = Math.floor((v - 0.45) / 0.18);
+      const cols = ['#4fc3c8', '#f2a65a', '#b48ce6'];
+      return (u * 5 + track) % 2 < 1.6 ? hex(cols[track % 3] || '#4fc3c8') : hex('#1c1c22');
+    }
+    case 'wechat': // 微信：一左一右的聊天气泡
+      if (v * 6 % 2 < 1) {
+        const row = Math.floor(v * 3);
+        return row % 2 ? (u > 0.45 ? hex('#95ec69') : hex('#ededed')) : (u < 0.55 ? hex('#ffffff') : hex('#ededed'));
+      }
+      return hex('#ededed');
+    case 'claude': return text('#f3c5a8', '#2b2421');
+    case 'gpt': return text('#e8e8e8', '#262626', 0.7);
+    case 'kimi': return text('#9cc0ff', '#1a1d2b', 0.7);
+    case 'doubao': return text('#c9b8ff', '#24203a', 0.7);
     case 'sleep': case null: case undefined: case 'away': return null; // 关着
     default:
       return (v * 10 + t / 900) % 2 < 1 && u < 0.25 + hash(Math.floor(v * 10 + t / 900), 3) * 0.6 ? hex('#cfe3ee') : hex('#2b3a48');
@@ -337,6 +434,7 @@ export function createRoom() {
   const px = new Px(buf);
   const pos = { cat: null, jelly: null };
   const heads = { cat: null, jelly: null };
+  const spots = {}; // 道具在屏幕上的位置，给拖拽判断用
 
   function moveToward(who, target, dt) {
     if (!target) { pos[who] = null; return null; }
@@ -353,10 +451,10 @@ export function createRoom() {
 
   /**
    * state = {
-   *   cat:   { online, activity, together },
-   *   jelly: { online, activity, together },
-   *   hour:  0..23 （本地时间，决定窗外的天色和房间明暗）
-   *   theme: 'cozy' …
+   *   cat / jelly: { online, activity, together },
+   *   hour: 0..23, period?: 'dawn'|'day'|'dusk'|'night'|'late'（不填就按 hour 自动）
+   *   props: { drawerOpen, toy: 'drawer'|'jelly'|'drag', massage, fast, eating: {cat, jelly}, tvWait,
+   *            drag: { item: 'toy'|'bag', x, y } }
    * }
    */
   function render(state, t) {
@@ -364,41 +462,43 @@ export function createRoom() {
     lastT = t;
     px.clear();
     const hour = state.hour ?? 14;
+    const per = PERIODS[state.period] || PERIODS[periodOf(hour)];
     const th = THEMES[state.theme] || THEMES.cozy;
+    const props = { eating: {}, ...(state.props || {}) };
     const together = !!(state.cat.together && state.jelly.together && state.cat.online && state.jelly.online);
     const cat = { ...state.cat, together };
     const jelly = { ...state.jelly, together };
+    // 按摩需要两只都在
+    if (props.massage && !(cat.online && jelly.online)) props.massage = false;
 
     drawShell(px, t, th);
-    drawWalls(px, t, th, hour);
-    drawFurniture(px, t, th, cat, jelly);
+    drawWalls(px, t, th, per);
+    const objs = [];
+    drawFurniture(px, t, th, cat, jelly, per, props, spots, objs);
 
-    const cs = stationFor(cat);
+    const cs = stationFor(cat, 'cat', props);
     const cp = moveToward('cat', cs ? SPOTS.cat[cs] : null, dt);
-    const js = stationFor(jelly);
+    const js = stationFor(jelly, 'jelly', props);
     const jp = moveToward('jelly', js ? SPOTS.jelly[js] : null, dt);
     heads.cat = heads.jelly = null;
 
-    // 按"离镜头远近"排序画：x + y 小的在后面
-    const actors = [];
-    if (cp) actors.push({ who: 'cat', p: cp, st: cs });
-    if (jp) actors.push({ who: 'jelly', p: jp, st: js });
-    actors.sort((a, b) => a.p[0] + a.p[1] - (b.p[0] + b.p[1]));
-    for (const a of actors) {
-      if (a.who === 'cat') drawCat(px, t, a.p, a.st, cat, heads);
-      else drawJelly(px, t, a.p, a.st, jelly, heads);
-    }
-    // 水母的睡觉小玻璃碗画在水母前面
-    drawBowlFront(px, t);
+    // 透视：离镜头越远（x + y 越小）越先画，近的盖住远的
+    if (cp) objs.push({ d: cp[0] + cp[1], draw: () => drawCat(px, t, cp, cs, cat, heads) });
+    if (jp) objs.push({ d: jp[0] + jp[1] + 0.01, draw: () => drawJelly(px, t, jp, js, jelly, heads, props) });
+    objs.push({ d: 124.5, draw: () => drawBowlFront(px, t) }); // 鱼缸的玻璃在睡觉的水母前面
+    objs.sort((a, b) => a.d - b.d);
+    for (const o of objs) o.draw();
+    drawTV(px, t, together || props.tvWait, together);
 
-    drawTV(px, t, together);
+    // 天色：压暗不发光的地方，然后把灯光加回去
+    if (per.tint) tintAll(px, per.tint, per.a);
+    for (const [x, y, r, c, a] of px.lights) glow(px, x, y, r, c, a * (1 + per.a * 2.2));
 
-    // 天色：清晨偏暖、傍晚偏橙、深夜偏蓝暗；台灯和屏幕的光留着
-    const tint = hour >= 22 || hour < 5 ? [[20, 24, 70], 0.28] : hour >= 19 ? [[40, 30, 90], 0.16] : hour >= 17 ? [[255, 140, 80], 0.08] : hour < 8 ? [[255, 200, 150], 0.06] : null;
-    if (tint) tintAll(px, tint[0], tint[1]);
-    if (hour >= 19 || hour < 6) { // 夜里灯更亮
-      const [lx, ly] = P(5, 92, 0);
-      glow(px, lx, ly - 24, 30, [255, 200, 130], 0.14);
+    // 拖拽中的道具画在最上面
+    if (props.drag) {
+      const { item, x, y } = props.drag;
+      if (item === 'toy') px.sprite(TOY, x - 2, y - 5, TOY_PAL);
+      if (item === 'bag') px.sprite(BAG, x - 4, y - 5, BAG_PAL);
     }
     return buf;
   }
@@ -407,12 +507,11 @@ export function createRoom() {
     x |= 0; y |= 0;
     if (x < 0 || y < 0 || x >= W || y >= H) return null;
     const tag = px.hit[y * W + x];
-    if (tag === 1) return 'cat';
-    if (tag === 2) return 'jelly';
+    if (tag && TAG_NAME[tag]) return TAG_NAME[tag];
     return buf[(y * W + x) * 4 + 3] > 20 ? 'room' : null;
   }
 
-  return { render, hitTest, heads, W, H };
+  return { render, hitTest, heads, spots, W, H };
 }
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -423,49 +522,82 @@ function drawCat(px, t, cp, cs, cat, heads) {
   const arrived = cs && dist(cp, SPOTS.cat[cs]) < 0.5;
   const fast = cat.activity === 'game' ? 3 : 1;
   const f = Math.floor((t * fast) / 600) % 2;
-  let spr, w = 12, h = 11, flip = false;
-  if (arrived && cs === 'sleep') { spr = CAT_SLEEP[Math.floor(t / 1400) % 2]; w = 14; h = 7; }
+  let spr, w = 12, h = 11, flip = false, ox = 0;
+  if (arrived && cs === 'massage') { spr = CAT_BELLY[Math.floor(t / 900) % 2]; w = 16; h = 7; }
+  else if (arrived && cs === 'sleep') { spr = CAT_SLEEP[Math.floor(t / 1400) % 2]; w = 14; h = 7; }
   else if (arrived && (cs === 'desk' || cs === 'tv')) { spr = CAT_BACK[f]; flip = cs === 'tv'; }
-  else {
+  else if (arrived && cs === 'eat') { // 低头吃饭，一点一点
+    spr = CAT_FRONT[0].map((r) => r.replace(/y/g, 'k'));
+    ox = 0;
+    h = 11 - (Math.floor(t / 300) % 2);
+  } else {
     const blink = t % 3800 < 140;
     spr = CAT_FRONT[f].map((r) => (blink ? r.replace(/y/g, 'k') : r));
   }
   const hop = !arrived ? -Math.abs(Math.sin(t / 90)) * 2 : 0;
-  const x0 = sx - w / 2, y0 = sy - h + hop;
+  const x0 = sx - w / 2 + ox, y0 = sy - h + hop;
   px.rect(Math.round(sx - 4), Math.round(sy) - 1, 8, 1, [0, 0, 0], 0.25);
-  px.sprite(spr, x0, y0, CAT_PAL, { flip, tag: 1 });
+  px.sprite(spr, x0, y0, CAT_PAL, { flip, tag: TAG.cat });
   if (arrived && cs === 'sleep') drawZ(px, sx + 5, sy - 10, t);
+  if (arrived && cs === 'eat') drawCrumbs(px, t, ...P(BOWL.cat[0], BOWL.cat[1], 2));
+  if (arrived && cs === 'massage' && t % 2600 < 1300) { // 舒服得冒小爱心
+    const p = (t % 1300) / 1300;
+    px.sprite(['r.r', 'rrr', '.r.'], sx + 5, sy - 8 - p * 6, { r: hex('#f05a78') }, { alpha: 1 - p });
+  }
   heads.cat = [sx, y0 - 2];
   if (arrived && cs === 'desk') drawNpc(px, cat.activity, sx + 9, sy - 6, t);
 }
 
-function drawJelly(px, t, jp, js, jelly, heads) {
+function drawJelly(px, t, jp, js, jelly, heads, props) {
   const bob = Math.round(Math.sin(t / 650) * 1.5);
   const [sx, sy] = P(jp[0], jp[1], jp[2]);
   const arrived = js && dist(jp, SPOTS.jelly[js]) < 0.5;
   const sleeping = arrived && js === 'sleep';
+  const massaging = js === 'massage';
   const fast = jelly.activity === 'game' ? 2.5 : 1;
   let spr = JELLY_SPR[Math.floor((t * fast) / (sleeping ? 1600 : 520)) % 2];
   if (sleeping) spr = spr.map((r) => r.replace(/e/g, 'J'));
-  else if (arrived && (js === 'desk' || js === 'tv')) spr = spr.map((r) => r.replace(/[ep]/g, 'j')); // 背对我们
+  else if (arrived && (js === 'desk' || js === 'tv' || js === 'eat')) spr = spr.map((r) => r.replace(/[ep]/g, 'j'));
   else if (t % 4200 < 160) spr = spr.map((r) => r.replace(/e/g, 'J'));
-  const x0 = sx - 5.5, y0 = sy - 13 + (sleeping ? 0 : bob);
-  // 地上的影子，飘得越高越淡
+
+  // 按摩：水母抱着硅胶棒上下慢慢捶，点水母会变快
+  let pound = 0;
+  if (massaging && arrived) {
+    const period = props.fast ? 420 : 1300;
+    pound = Math.abs(Math.sin((t / period) * Math.PI));
+  }
+  const x0 = sx - 5.5, y0 = sy - 13 + (sleeping || massaging ? 0 : bob) + Math.round(pound * 3);
   const [fx, fy] = P(jp[0], jp[1], 0);
   px.rect(Math.round(fx - 3), Math.round(fy), 7, 1, [0, 0, 0], Math.max(0.08, 0.25 - jp[2] / 80));
-  glow(px, sx, sy - 7, 10, [170, 235, 250], sleeping ? 0.06 : 0.1);
-  px.sprite(spr, x0, y0, JELLY_PAL, { alpha: sleeping ? 0.8 : 0.95, tag: 2 });
+  px.lights.push([sx, sy - 7, 10, [170, 235, 250], sleeping ? 0.05 : 0.09]);
+  px.glowing(() => px.sprite(spr, x0, y0, JELLY_PAL, { alpha: sleeping ? 0.8 : 0.95, tag: TAG.jelly }));
+  if (props.toy === 'jelly') {
+    // 硅胶棒抱在触手里：竖着，下端随动作往下捶
+    const tx = massaging ? sx - 2 : sx + 4, ty = y0 + 9 + Math.round(pound * 5);
+    px.sprite(TOY, tx, ty, TOY_PAL, { tag: TAG.toy });
+    if (massaging && arrived && pound > 0.97) { // 捶到的瞬间冒一点小星星
+      px.set(tx - 1, ty + 9, hex('#fff6c8'));
+      px.set(tx + 5, ty + 8, hex('#fff6c8'));
+    }
+  }
   if (sleeping) drawZ(px, sx + 6, sy - 16, t);
+  if (arrived && js === 'eat') drawCrumbs(px, t, ...P(BOWL.jelly[0], BOWL.jelly[1], 2));
   heads.jelly = [sx, y0 - 2];
   if (arrived && js === 'desk') drawNpc(px, jelly.activity, sx + 13, sy - 1, t);
 }
 
+function drawCrumbs(px, t, bx, by) {
+  // 吃饭时碗边蹦出来的小碎屑
+  for (let i = 0; i < 3; i++) {
+    const p = ((t + i * 400) % 1200) / 1200;
+    px.set(Math.round(bx - 3 + i * 3 + Math.sin(p * 5 + i) * 2), Math.round(by - 3 - Math.sin(p * Math.PI) * 4), KIBBLE[i % 3], 1 - p);
+  }
+}
+
 // ---------- 地板和外壳 ----------
 function drawShell(px, t, th) {
-  // 地板厚度（前面两个侧面）
   px.poly([P(0, S, 0), P(S, S, 0), P(S, S, -6), P(0, S, -6)], C.slabL);
   px.poly([P(S, 0, 0), P(S, S, 0), P(S, S, -6), P(S, 0, -6)], C.slabR);
-  // 木地板
   px.poly([P(0, 0, 0), P(S, 0, 0), P(S, S, 0), P(0, S, 0)], (x, y) => {
     const [wx, wy] = floorAt(x, y);
     const row = Math.floor(wy / 8);
@@ -477,23 +609,20 @@ function drawShell(px, t, th) {
     else c = row % 2 ? th.woodA : th.woodB;
     if (hash(Math.floor(wx), Math.floor(wy)) > 0.985) c = mix(c, th.woodSeam, 0.5);
     const edge = Math.min(wx, wy);
-    if (edge < 4) c = mix(c, [40, 20, 20], ((4 - edge) / 4) * 0.35); // 墙角阴影
+    if (edge < 4) c = mix(c, [40, 20, 20], ((4 - edge) / 4) * 0.35);
     return c;
   });
-  // 前沿高光
   px.line(P(0, S, 0), P(S, S, 0), th.woodHi, 0.5);
   px.line(P(S, 0, 0), P(S, S, 0), th.woodHi, 0.4);
 }
 
-function drawWalls(px, t, th, hour) {
-  // 左墙：竖条纹
+function drawWalls(px, t, th, per) {
   px.poly([P(0, 0, 0), P(0, S, 0), P(0, S, WALL), P(0, 0, WALL)], (x, y) => {
     const [wy, wz] = leftWallAt(x, y);
     if (wz < 4) return wz < 1 ? th.baseTop : th.base;
     if (wz > WALL - 2) return th.baseTop;
     return Math.floor(wy / 4) % 2 ? th.wallA : th.wallB;
   });
-  // 后墙：同色系，暗一点（背光面）
   px.poly([P(0, 0, 0), P(S, 0, 0), P(S, 0, WALL), P(0, 0, WALL)], (x, y) => {
     const [wx, wz] = backWallAt(x, y);
     if (wz < 4) return wz < 1 ? th.baseTop : th.base;
@@ -501,36 +630,41 @@ function drawWalls(px, t, th, hour) {
     const c = Math.floor(wx / 4) % 2 ? th.backA : th.backB;
     return mix(c, [30, 40, 50], 0.12);
   });
-  // 墙顶厚度、外端面
   px.poly([P(-4, -4, WALL), P(S, -4, WALL), P(S, 0, WALL), P(0, 0, WALL), P(0, S, WALL), P(-4, S, WALL)], C.rimTop);
   px.poly([P(-4, S, -6), P(0, S, -6), P(0, S, WALL), P(-4, S, WALL)], C.rim);
   px.poly([P(S, -4, -6), P(S, 0, -6), P(S, 0, WALL), P(S, -4, WALL)], C.rimDark);
-  // 墙角的竖线
   px.line(P(0, 0, 0), P(0, 0, WALL), mix(th.wallB, [0, 0, 0], 0.3), 0.6);
 
-  // ----- 左墙：窗户（天色跟着真实时间） -----
-  const sky = skyColor(hour);
+  // ----- 左墙：窗户，窗外是对应时段的天 -----
+  const sky = skyColor(per.sky);
   const W0 = 68, W1 = 88;
-  px.poly([P(0, W0, 22), P(0, W1, 22), P(0, W1, 42), P(0, W0, 42)], (x, y) => {
+  px.glowing(() => px.poly([P(0, W0, 22), P(0, W1, 22), P(0, W1, 42), P(0, W0, 42)], (x, y) => {
     const [wy, wz] = leftWallAt(x, y);
-    if (wy < W0 + 1.5 || wy > W1 - 1.5 || wz < 23 || wz > 41) return hex('#e8dcc4');
-    if (Math.abs(wy - (W0 + W1) / 2) < 0.7 || Math.abs(wz - 32) < 0.7) return hex('#e8dcc4');
+    if (wy < W0 + 1.5 || wy > W1 - 1.5 || wz < 23 || wz > 41) return mix(hex('#e8dcc4'), [40, 40, 70], per.a);
+    if (Math.abs(wy - (W0 + W1) / 2) < 0.7 || Math.abs(wz - 32) < 0.7) return mix(hex('#e8dcc4'), [40, 40, 70], per.a);
     let c = mix(sky.bottom, sky.top, (wz - 23) / 18);
     if (sky.stars && hash(Math.floor(wy), Math.floor(wz)) > 0.95) c = hex('#fff6d0');
     if (sky.moon && Math.hypot(wy - 82, wz - 37) < 1.8) c = hex('#fff2b8');
+    if (sky.sunDisk && Math.hypot(wy - 74, wz - 26) < 2.5) c = hex('#ffcf6a');
     if (!sky.stars && hash(Math.floor(wy / 3), Math.floor(wz / 2)) > 0.93 && wz > 33) c = mix(c, [255, 255, 255], 0.6);
     return c;
-  });
+  }));
   px.box(0, W0 - 1, 20, 3, W1 - W0 + 2, 2, { top: hex('#efe3cc'), left: hex('#cdbfa6'), right: hex('#d9cbb2'), outline: false });
-  const curtain = (y0) => px.poly([P(0, y0, 18), P(0, y0 + 4, 18), P(0, y0 + 4, 45), P(0, y0, 45)], (x, y) => {
+  // 窗帘：开着 / 半拉 / 拉上
+  const cw = per.curtains === 'closed' ? 10.5 : per.curtains === 'half' ? 6 : 4;
+  const curtain = (y0, y1) => px.poly([P(0, y0, 18), P(0, y1, 18), P(0, y1, 45), P(0, y0, 45)], (x, y) => {
     const [wy] = leftWallAt(x, y);
     return Math.floor(wy) % 2 ? hex('#c45b6a') : hex('#b04e5e');
   });
-  curtain(W0 - 3); curtain(W1 - 1);
+  curtain(W0 - 3, W0 - 3 + cw);
+  curtain(W1 + 3 - cw, W1 + 3);
   px.line(P(0, W0 - 4, 45.5), P(0, W1 + 4, 45.5), hex('#5a3d2c'));
-  // 白天阳光从窗户斜着洒到地板上
-  if (sky.sun) {
-    px.poly([P(6, W0 + 6, 0), P(6, W1 - 2, 0), P(30, W1 + 6, 0), P(30, W0 + 14, 0)], [255, 240, 200, 0.12]);
+  // 阳光 / 夕阳 / 月光从窗户洒到地板上
+  if (per.sun) px.poly([P(6, W0 + 6, 0), P(6, W1 - 2, 0), P(30, W1 + 6, 0), P(30, W0 + 14, 0)], [255, 240, 200, 0.14]);
+  if (per.sunset) px.poly([P(6, W0 + 6, 0), P(6, W1 - 2, 0), P(40, W1 + 8, 0), P(40, W0 + 18, 0)], [255, 170, 100, 0.16]);
+  if (per.moonbeam) {
+    px.lights.push([...P(16, 78, 0), 12, [150, 170, 255], 0.06]);
+    px.glowing(() => px.poly([P(10, 76, 0), P(10, 79.5, 0), P(40, 86, 0), P(40, 81, 0)], [180, 200, 255, 0.35]));
   }
 
   // 左墙：一幅鱼的画、便签
@@ -543,23 +677,20 @@ function drawWalls(px, t, th, hour) {
   });
   px.poly([P(0, 56, 34), P(0, 60, 34), P(0, 60, 38), P(0, 56, 38)], hex('#fff1a8'));
 
-  // ----- 后墙：两人的合照、水母的海报、挂钟 -----
-  // 合照（一只猫一只水母）
+  // ----- 后墙：合照、爱心贴纸、挂钟 -----
   px.poly([P(44, 0, 30), P(58, 0, 30), P(58, 0, 42), P(44, 0, 42)], (x, y) => {
     const [wx, wz] = backWallAt(x, y);
     if (wx < 45 || wx > 57 || wz < 31 || wz > 41) return hex('#8a5a38');
     const u = (wx - 45) / 12, v = (wz - 31) / 10;
-    if (Math.hypot((u - 0.32) / 0.14, (v - 0.35) / 0.2) < 1) return C.k; // 猫
-    if (u > 0.2 && u < 0.26 && v > 0.55 && v < 0.7) return C.k; // 猫耳
+    if (Math.hypot((u - 0.32) / 0.14, (v - 0.35) / 0.2) < 1) return C.k;
+    if (u > 0.2 && u < 0.26 && v > 0.55 && v < 0.7) return C.k;
     if (u > 0.38 && u < 0.44 && v > 0.55 && v < 0.7) return C.k;
-    if (Math.hypot((u - 0.7) / 0.14, (v - 0.55) / 0.13) < 1 && v > 0.45) return C.jelly; // 水母
+    if (Math.hypot((u - 0.7) / 0.14, (v - 0.55) / 0.13) < 1 && v > 0.45) return C.jelly;
     if (v < 0.45 && v > 0.15 && u > 0.6 && u < 0.8 && Math.floor(u * 30) % 2 === 0) return C.tent;
     return hex('#f6e7d0');
   });
-  // 一颗小爱心贴纸
   const [hx, hy] = P(60, 0, 42);
   px.sprite(['r.r', 'rrr', '.r.'], hx - 1, hy - 2, { r: hex('#f05a78') });
-  // 挂钟（显示真实时间）
   const [ccx, ccy] = P(76, 0, 40);
   for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
     const r = Math.hypot(i, j);
@@ -573,7 +704,7 @@ function drawWalls(px, t, th, hour) {
   hand(mAng, 3.5, hex('#3a2a22'));
   hand(hAng, 2.2, hex('#c45b6a'));
 
-  // 串灯（沿着两面墙的顶）
+  // 串灯：黄昏和夜晚才亮
   const bulbs = [];
   for (let i = 0; i < 9; i++) bulbs.push([0, 6 + i * 10, WALL - 6 - Math.sin((i % 3) * 1.6) * 2]);
   for (let i = 0; i < 9; i++) bulbs.push([6 + i * 10, 0, WALL - 6 - Math.sin((i % 3) * 1.6 + 1) * 2]);
@@ -583,123 +714,190 @@ function drawWalls(px, t, th, hour) {
   }
   bulbs.forEach((b, i) => {
     const [sx, sy] = P(...b);
-    const on = (Math.floor(t / 900) + i) % 3 !== 0;
     const col = th.lights[i % th.lights.length];
-    px.set(sx, sy, on ? col : mix(col, [60, 60, 60], 0.5));
-    if (on) glow(px, sx, sy, 3, col, 0.12);
+    const on = per.lights && (Math.floor(t / 900) + i) % 3 !== 0;
+    if (on) { px.glowing(() => px.set(sx, sy, col)); px.lights.push([sx, sy, 4, col, 0.12]); }
+    else px.set(sx, sy, mix(col, [70, 70, 70], 0.55));
   });
 }
 
-// ---------- 家具 ----------
-function drawFurniture(px, t, th, cat, jelly) {
+// ---------- 家具和道具 ----------
+function drawFurniture(px, t, th, cat, jelly, per, props, spots, objs) {
+  // 地上平铺的东西直接画；立起来的家具放进 objs，和小动物一起按远近排序再画
   // 电视前的大地毯
   px.poly([P(16, 16, 0), P(48, 16, 0), P(48, 48, 0), P(16, 48, 0)], (x, y) => {
     const [wx, wy] = floorAt(x, y);
     if (wx < 17.5 || wx > 46.5 || wy < 17.5 || wy > 46.5) return th.rugEdge;
-    if (Math.abs(wx - 32) + Math.abs(wy - 32) < 5) return th.rugEdge; // 中间的小菱形花纹
+    if (Math.abs(wx - 32) + Math.abs(wy - 32) < 5) return th.rugEdge;
     return Math.floor((wx + wy) / 4) % 2 ? th.rugA : th.rugB;
   });
 
-  // 角落的电视柜
-  const cab = { top: hex('#a0704a'), left: hex('#86593a'), right: hex('#6d462c'), edge: hex('#c38d60') };
-  px.shadow(2, 2, 12, 12);
-  px.box(2, 2, 0, 12, 12, 9, cab);
-  // 电视柜上的小游戏机
-  px.box(5, 8, 9, 5, 4, 2, { top: hex('#e8e4ee'), left: hex('#c9c3d3'), right: hex('#b3adbf'), outline: false });
+  objs.push({ d: 16, draw: () => {
+    // 角落的电视柜
+    const cab = { top: hex('#a0704a'), left: hex('#86593a'), right: hex('#6d462c'), edge: hex('#c38d60') };
+    px.shadow(2, 2, 12, 12);
+    px.box(2, 2, 0, 12, 12, 9, cab);
+    px.box(5, 8, 9, 5, 4, 2, { top: hex('#e8e4ee'), left: hex('#c9c3d3'), right: hex('#b3adbf'), outline: false });
+  } });
 
-  // 后墙：书架
-  const shelf = { top: hex('#8a5a38'), left: hex('#74482c'), right: hex('#5e3a24'), edge: hex('#a8744c') };
-  px.shadow(70, 0, 16, 10);
-  px.box(70, 0, 0, 16, 10, 30, shelf);
-  for (let k = 0; k < 3; k++) {
-    const z = 6 + k * 9;
-    px.line(P(70, 10, z - 1), P(86, 10, z - 1), hex('#a8744c'));
-    for (let b = 0; b < 6; b++) {
-      const col = hex(['#c95d5d', '#e2c26b', '#5d8fc9', '#6fbf8e', '#d9a1d4', '#f2a65a'][(b + k * 2) % 6]);
-      const [bx, by] = P(71 + b * 2.5, 10, z);
-      px.rect(Math.round(bx), Math.round(by) - 5 + (b % 2), 2, 5 - (b % 2), col);
+  objs.push({ d: 83, draw: () => {
+    // 后墙：书架
+    const shelf = { top: hex('#8a5a38'), left: hex('#74482c'), right: hex('#5e3a24'), edge: hex('#a8744c') };
+    px.shadow(70, 0, 16, 10);
+    px.box(70, 0, 0, 16, 10, 30, shelf);
+    for (let k = 0; k < 3; k++) {
+      const z = 6 + k * 9;
+      px.line(P(70, 10, z - 1), P(86, 10, z - 1), hex('#a8744c'));
+      for (let b = 0; b < 6; b++) {
+        const col = hex(['#c95d5d', '#e2c26b', '#5d8fc9', '#6fbf8e', '#d9a1d4', '#f2a65a'][(b + k * 2) % 6]);
+        const [bx, by] = P(71 + b * 2.5, 10, z);
+        px.rect(Math.round(bx), Math.round(by) - 5 + (b % 2), 2, 5 - (b % 2), col);
+      }
     }
-  }
-  // 书架顶上的小盆栽
-  const [ppx, ppy] = P(80, 5, 30);
-  px.rect(Math.round(ppx) - 2, Math.round(ppy) - 3, 4, 3, hex('#b5653a'));
-  px.sprite(['.g.g.', 'ggGgg', '.gGg.'], ppx - 2.5, ppy - 6, { g: hex('#5fae6b'), G: hex('#3f8a4f') });
+    const [ppx, ppy] = P(80, 5, 30);
+    px.rect(Math.round(ppx) - 2, Math.round(ppy) - 3, 4, 3, hex('#b5653a'));
+    px.sprite(['.g.g.', 'ggGgg', '.gGg.'], ppx - 2.5, ppy - 6, { g: hex('#5fae6b'), G: hex('#3f8a4f') });
+  } });
 
-  // 后墙：水母的书桌（屏幕朝 +y）
-  const desk2 = { top: hex('#c8a07a'), left: hex('#a8825e'), right: hex('#8e6b4a'), edge: hex('#e0bb92') };
-  px.shadow(44, 0, 22, 12);
-  px.box(44, 0, 0, 22, 12, 15, desk2);
-  px.box(49, 1, 15, 12, 3, 10, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
-  px.box(54, 0, 15, 2, 2, 2, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
-  const jAct = jelly.online && !jelly.together ? jelly.activity : null;
-  px.poly([P(50, 4, 16), P(60, 4, 16), P(60, 4, 24), P(50, 4, 24)], (x, y) => {
-    const dx = x + 0.5 - OX;
-    const wx = dx + 4, wz = OY + (wx + 4) / 2 - (y + 0.5);
-    return screenColor(jAct, t, (wx - 50) / 10, 1 - (wz - 16) / 8) || hex('#151519');
-  });
-  if (screenColor(jAct, t, 0.5, 0.5)) { const [gx, gy] = P(55, 10, 16); glow(px, gx, gy, 12, [190, 220, 255], 0.07); }
-  // 水母桌上的小海螺
-  const [shx, shy] = P(62, 8, 15);
-  px.sprite(['..pp', '.pPp', 'pPpp', 'ppp.'], shx - 2, shy - 4, { p: hex('#f3b6c8'), P: hex('#d98aa4') });
+  objs.push({ d: 96, draw: () => {
+    // 墙角的猫粮袋（可以拖）
+    if (!(props.drag && props.drag.item === 'bag')) {
+      const [gx, gy] = P(BAG_AT[0], BAG_AT[1], 0);
+      px.rect(Math.round(gx) - 4, Math.round(gy) - 1, 9, 1, [0, 0, 0], 0.25);
+      px.sprite(BAG, gx - 4, gy - 8, BAG_PAL, { tag: TAG.bag });
+    }
+  } });
 
-  // 左墙：猫的书桌（屏幕朝 +x）
-  const wood = { top: hex('#b98252'), left: hex('#9a6a42'), right: hex('#83582f'), edge: hex('#d39a66') };
-  px.shadow(0, 44, 12, 22);
-  px.box(0, 44, 0, 12, 22, 16, wood);
-  for (const z of [4, 10]) {
-    px.line(P(12, 46, z), P(12, 54, z), hex('#6b4526'));
-    const [hx2, hy2] = P(12, 50, z + 2.5);
-    px.set(hx2, hy2, hex('#e2c26b'));
-  }
-  px.box(1, 49, 16, 3, 13, 11, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
-  px.box(4, 55, 16, 2, 2, 2, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
-  const cAct = cat.online && !cat.together ? cat.activity : null;
-  px.poly([P(4, 50, 17), P(4, 61, 17), P(4, 61, 26), P(4, 50, 26)], (x, y) => {
-    const dx = x + 0.5 - OX;
-    const wy = 4 - dx, wz = OY + (4 + wy) / 2 - (y + 0.5);
-    return screenColor(cAct, t, (wy - 50) / 11, 1 - (wz - 17) / 9) || hex('#151519');
-  });
-  if (screenColor(cAct, t, 0.5, 0.5)) { const [gx, gy] = P(10, 56, 18); glow(px, gx, gy, 14, [190, 220, 255], 0.08); }
-  // 猫桌上的马克杯
-  const [mx, my] = P(8, 46, 16);
-  px.sprite(['.www.', 'wwwwW', 'wwwwW', '.www.'], mx - 2, my - 4, { w: hex('#f1e7d3'), W: hex('#c8b89a') });
-  if (t % 3000 < 2000) px.set(mx, my - 6 - Math.floor(t / 500) % 2, hex('#ffffff'), 0.5);
+  objs.push({ d: 61, draw: () => {
+    // 水母的书桌（屏幕朝 +y）
+    const desk2 = { top: hex('#c8a07a'), left: hex('#a8825e'), right: hex('#8e6b4a'), edge: hex('#e0bb92') };
+    px.shadow(44, 0, 22, 12);
+    px.box(44, 0, 0, 22, 12, 15, desk2);
+    px.box(49, 1, 15, 12, 3, 10, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
+    px.box(54, 0, 15, 2, 2, 2, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
+    const jAct = jelly.online && !jelly.together && !props.massage && !(props.eating && props.eating.jelly) ? jelly.activity : null;
+    px.glowing(() => px.poly([P(50, 4, 16), P(60, 4, 16), P(60, 4, 24), P(50, 4, 24)], (x, y) => {
+      const dx = x + 0.5 - OX;
+      const wx = dx + 4, wz = OY + (wx + 4) / 2 - (y + 0.5);
+      return screenColor(jAct, t, (wx - 50) / 10, 1 - (wz - 16) / 8) || hex('#151519');
+    }));
+    if (screenColor(jAct, t, 0.5, 0.5)) px.lights.push([...P(55, 10, 16), 12, [190, 220, 255], 0.07]);
+    const [shx, shy] = P(62, 8, 15);
+    px.sprite(['..pp', '.pPp', 'pPpp', 'ppp.'], shx - 2, shy - 4, { p: hex('#f3b6c8'), P: hex('#d98aa4') });
+  } });
+
+  objs.push({ d: 61, draw: () => {
+    // 猫的书桌（屏幕朝 +x）
+    const wood = { top: hex('#b98252'), left: hex('#9a6a42'), right: hex('#83582f'), edge: hex('#d39a66') };
+    px.shadow(0, 44, 12, 22);
+    px.box(0, 44, 0, 12, 22, 16, wood);
+    for (const z of [4, 10]) {
+      px.line(P(12, 46, z), P(12, 54, z), hex('#6b4526'));
+      const [hx2, hy2] = P(12, 50, z + 2.5);
+      px.set(hx2, hy2, hex('#e2c26b'));
+    }
+    px.box(1, 49, 16, 3, 13, 11, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
+    px.box(4, 55, 16, 2, 2, 2, { top: hex('#3a3a44'), left: hex('#2b2b33'), right: hex('#2b2b33') });
+    const cAct = cat.online && !cat.together && !props.massage && !(props.eating && props.eating.cat) ? cat.activity : null;
+    px.glowing(() => px.poly([P(4, 50, 17), P(4, 61, 17), P(4, 61, 26), P(4, 50, 26)], (x, y) => {
+      const dx = x + 0.5 - OX;
+      const wy = 4 - dx, wz = OY + (4 + wy) / 2 - (y + 0.5);
+      return screenColor(cAct, t, (wy - 50) / 11, 1 - (wz - 17) / 9) || hex('#151519');
+    }));
+    if (screenColor(cAct, t, 0.5, 0.5)) px.lights.push([...P(10, 56, 18), 14, [190, 220, 255], 0.08]);
+    const [mx, my] = P(8, 46, 16);
+    px.sprite(['.www.', 'wwwwW', 'wwwwW', '.www.'], mx - 2, my - 4, { w: hex('#f1e7d3'), W: hex('#c8b89a') });
+    if (per.mugSteam || t % 3000 < 2000) {
+      for (let i = 0; i < (per.mugSteam ? 3 : 1); i++) {
+        const p = ((t + i * 600) % 1800) / 1800;
+        px.set(mx + Math.round(Math.sin(p * 6 + i)), my - 6 - Math.round(p * 6), hex('#ffffff'), 0.6 * (1 - p));
+      }
+    }
+  } });
+
+  objs.push({ d: 82, draw: () => {
+    // 床头柜和抽屉（靠左墙、猫窝旁边）
+    const D = DRAWER;
+    const nst = { top: hex('#c08a5a'), left: hex('#a06e44'), right: hex('#8a5c36'), edge: hex('#dca676') };
+    px.shadow(D.x, D.y, D.w, D.d);
+    px.box(D.x, D.y, 0, D.w, D.d, D.h, nst, TAG.drawer);
+    const slide = props.drawerOpen ? 7 : 0;
+    // 抽屉本体（往 +x 方向拉出来）
+    const drw = { top: hex('#d9b48a'), left: hex('#b98e62'), right: hex('#a07a50'), edge: hex('#f0cfa4') };
+    if (slide) {
+      px.box(D.x + D.w, D.y + 1, 5, slide, D.d - 2, 4, { top: hex('#5a3a26'), left: drw.left, right: drw.right, edge: drw.edge }, TAG.drawer);
+      // 抽屉里的硅胶棒（横躺着）
+      if (props.toy === 'drawer' || !props.toy) {
+        const [tx, ty] = P(D.x + D.w + slide / 2, D.y + D.d / 2, 9);
+        px.sprite(['.ssssssd', 'shhhhhsd', '.ssssssd'], tx - 4, ty - 2, TOY_PAL, { tag: TAG.toy });
+      }
+    } else {
+      px.line(P(D.x + D.w, D.y + 1, 6), P(D.x + D.w, D.y + D.d - 1, 6), hex('#6b4526'));
+      const [kx, ky] = P(D.x + D.w, D.y + D.d / 2, 8);
+      px.set(kx, ky, hex('#e2c26b'));
+    }
+    // 床头柜上的小夜灯（深夜亮）
+    const [nlx, nly] = P(D.x + 5, D.y + 5, D.h);
+    px.sprite(['.mmm.', 'mMmMm', '..s..', '..s..'], nlx - 2, nly - 4, { m: hex('#f28c8c'), M: hex('#fff0f0'), s: hex('#f3ead7') });
+    if (per.nightlight) { px.glowing(() => px.sprite(['.mmm.', 'mMmMm'], nlx - 2, nly - 4, { m: hex('#ffb3a8'), M: hex('#fffbe8') })); px.lights.push([nlx, nly - 3, 24, [255, 190, 150], 0.2]); }
+  } });
 
   // 猫窝
   ellipse(px, ...P(24, 82, 0), 10, 5, hex('#4b3a5c'));
   ellipse(px, ...P(24, 82, 1), 8, 4, hex('#6c5785'));
   ellipse(px, ...P(24, 82, 2), 6, 3, hex('#8b75a6'));
 
-  // 水母的睡觉玻璃碗：小凳子 + 碗的后半边（前半边在角色之后画）
-  const stool = { top: hex('#c8a07a'), left: hex('#a8825e'), right: hex('#8e6b4a'), edge: hex('#e0bb92') };
-  px.shadow(78, 34, 12, 12);
-  px.box(78, 34, 0, 12, 12, 5, stool);
-  const [bcx, bcy] = P(84, 40, 5);
-  for (let j = -7; j <= 7; j++) for (let i = -7; i <= 7; i++) {
-    if (Math.hypot(i, j) > 7) continue;
-    px.set(Math.round(bcx + i), Math.round(bcy - 7 + j), [150, 220, 240], j > -3 ? 0.3 : 0.12); // 碗里的水
-  }
+  // 两个小饭碗
+  for (const who of ['cat', 'jelly']) objs.push({ d: BOWL[who][0] + BOWL[who][1], draw: () => {
+    const [bx, by] = P(BOWL[who][0], BOWL[who][1], 0);
+    const full = props.eating && props.eating[who];
+    const col = who === 'cat' ? hex('#e87a7a') : hex('#7cc4dc');
+    px.sprite(['.wwwww.', 'wfffffw', 'ccccccc', '.ccccc.'], bx - 3.5, by - 4,
+      { w: full ? KIBBLE[1] : hex('#3a2a22'), f: full ? KIBBLE[0] : hex('#2a1e18'), c: col }, { tag: who === 'cat' ? TAG.bowlCat : TAG.bowlJelly });
+    if (full) { px.set(bx - 1, by - 5, KIBBLE[2]); px.set(bx + 1, by - 5, KIBBLE[0]); }
+    spots['bowl' + (who === 'cat' ? 'Cat' : 'Jelly')] = [bx, by - 2];
+  } });
 
-  // 落地灯
-  const [lx, ly] = P(5, 92, 0);
-  px.rect(Math.round(lx) - 2, Math.round(ly) - 1, 5, 1, hex('#3a2a22'));
-  px.rect(Math.round(lx), Math.round(ly) - 22, 1, 21, hex('#3a2a22'));
-  px.sprite(['..aaaa..', '.aAAAAa.', 'aAAAAAAa', 'aaaaaaaa'], lx - 3.5, ly - 27, { a: hex('#e8a25a'), A: hex('#ffd59a') });
-  glow(px, lx, ly - 22, 22, [255, 200, 130], 0.1);
+  objs.push({ d: 123.9, draw: () => {
+    // 水母的睡觉鱼缸
+    const stool = { top: hex('#c8a07a'), left: hex('#a8825e'), right: hex('#8e6b4a'), edge: hex('#e0bb92') };
+    px.shadow(78, 34, 12, 12);
+    px.box(78, 34, 0, 12, 12, 5, stool);
+    const [bcx, bcy] = P(84, 40, 5);
+    for (let j = -7; j <= 7; j++) for (let i = -7; i <= 7; i++) {
+      if (Math.hypot(i, j) > 7) continue;
+      px.set(Math.round(bcx + i), Math.round(bcy - 7 + j), [150, 220, 240], j > -3 ? 0.3 : 0.12);
+    }
+  } });
 
-  // 右边角落的大盆栽
-  const [gx2, gy2] = P(90, 62, 0);
-  px.box(86, 58, 0, 8, 8, 7, { top: hex('#4a3226'), left: hex('#c9744a'), right: hex('#a95f3b'), edge: hex('#e08a5c') });
-  px.sprite([
-    '...g...g..',
-    '..gGg.gGg.',
-    '.gGGgggGGg',
-    'gGg.gGg.gG',
-    '.g..gGg..g',
-    '....gGg...',
-  ], gx2 - 5, gy2 - 19, { g: hex('#5fae6b'), G: hex('#3f8a4f') });
+  objs.push({ d: 97, draw: () => {
+    // 落地灯
+    const [lx, ly] = P(5, 92, 0);
+    px.rect(Math.round(lx) - 2, Math.round(ly) - 1, 5, 1, hex('#3a2a22'));
+    px.rect(Math.round(lx), Math.round(ly) - 22, 1, 21, hex('#3a2a22'));
+    if (per.lamp) {
+      px.glowing(() => px.sprite(['..aaaa..', '.aAAAAa.', 'aAAAAAAa', 'aaaaaaaa'], lx - 3.5, ly - 27, { a: hex('#f6b46a'), A: hex('#fff0c8') }));
+      px.lights.push([lx, ly - 22, 26, [255, 200, 130], 0.13]);
+    } else {
+      px.sprite(['..aaaa..', '.aAAAAa.', 'aAAAAAAa', 'aaaaaaaa'], lx - 3.5, ly - 27, { a: hex('#c98a4a'), A: hex('#e8c08a') });
+    }
+  } });
 
-  // 地上的小东西：毛线球、小鱼玩具、坐垫
+  objs.push({ d: 152, draw: () => {
+    // 大盆栽
+    const [gx2, gy2] = P(90, 62, 0);
+    px.box(86, 58, 0, 8, 8, 7, { top: hex('#4a3226'), left: hex('#c9744a'), right: hex('#a95f3b'), edge: hex('#e08a5c') });
+    px.sprite([
+      '...g...g..',
+      '..gGg.gGg.',
+      '.gGGgggGGg',
+      'gGg.gGg.gG',
+      '.g..gGg..g',
+      '....gGg...',
+    ], gx2 - 5, gy2 - 16, { g: hex('#5fae6b'), G: hex('#3f8a4f') });
+  } });
+
+  // 地上的小东西
   const [yx, yy] = P(48, 88, 0);
   px.sprite(['.rr.', 'rRrr', 'rrRr', '.rr.'], yx - 2, yy - 4, { r: hex('#e87a7a'), R: hex('#c45b5b') });
   px.line([yx + 2, yy - 1], [yx + 7, yy + 1], hex('#e87a7a'));
@@ -710,35 +908,46 @@ function drawFurniture(px, t, th, cat, jelly) {
 }
 
 function drawBowlFront(px, t) {
-  // 圆圆的玻璃鱼缸，盖在睡觉的水母前面
   const [bcx, bcy] = P(84, 40, 5);
   for (let k = 0; k < 64; k++) {
     const a = (k / 64) * Math.PI * 2;
-    if (Math.sin(a) < -0.85) continue; // 顶上开口
+    if (Math.sin(a) < -0.85) continue;
     px.set(Math.round(bcx + Math.cos(a) * 7.5), Math.round(bcy - 7 - Math.sin(a) * 7.5), [225, 248, 255], 0.6);
   }
-  px.line([bcx - 4, bcy - 14], [bcx + 4, bcy - 14], [225, 248, 255], 0.7); // 缸口
-  px.line([bcx - 5, bcy - 10], [bcx - 5, bcy - 6], [255, 255, 255], 0.7); // 高光
-  px.line([bcx - 3, bcy - 4], [bcx + 3, bcy - 4], [120, 200, 230], 0.5); // 水面
+  px.line([bcx - 4, bcy - 14], [bcx + 4, bcy - 14], [225, 248, 255], 0.7);
+  px.line([bcx - 5, bcy - 10], [bcx - 5, bcy - 6], [255, 255, 255], 0.7);
+  px.line([bcx - 3, bcy - 4], [bcx + 3, bcy - 4], [120, 200, 230], 0.5);
   const p = (t % 2600) / 2600;
   px.set(Math.round(bcx + 3 + Math.sin(p * 6)), Math.round(bcy - 3 - p * 9), [240, 252, 255], 0.8 * (1 - p));
 }
 
-function drawTV(px, t, on) {
-  // 电视挂在墙角，正对着我们：在屏幕上是一个正矩形
+function drawTV(px, t, on, playing) {
+  // 电视挂在墙角，正对着我们。双击可以叫上 TA 一起看 B 站。
   const x0 = OX - 15, y0 = OY - 34, w = 30, h = 19;
-  px.rect(x0, y0, w, h, hex('#1d1b24'));
+  px.rect(x0, y0, w, h, hex('#1d1b24'), 1, TAG.tv);
   px.rect(x0 + 1, y0 + h, w - 2, 1, hex('#0f0e14'));
-  for (let j = 2; j < h - 2; j++) for (let i = 2; i < w - 2; i++) {
-    if (!on) { px.set(x0 + i, y0 + j, (i + j) % 7 === 0 ? hex('#2a2834') : hex('#14131a')); continue; }
-    const u = (i - 2) / (w - 4), v = (j - 2) / (h - 4);
-    const s = Math.sin(u * 6 + t / 400) + Math.sin(v * 5 - t / 500);
-    let c = s > 0.6 ? hex('#fb7299') : s > -0.4 ? hex('#4fb7e6') : hex('#2f7fb0');
-    if ((j + Math.floor(t / 80)) % 9 === 0) c = mix(c, [255, 255, 255], 0.25);
-    px.set(x0 + i, y0 + j, c);
-  }
-  px.set(x0 + w - 3, y0 + h - 2, on ? hex('#7ed491') : hex('#a04040'));
-  if (on) px.poly([[OX - 15, OY - 15], [OX + 15, OY - 15], [OX + 45, OY + 35], [OX - 45, OY + 35]], [180, 220, 255, 0.07]);
+  px.glowing(() => {
+    for (let j = 2; j < h - 2; j++) for (let i = 2; i < w - 2; i++) {
+      if (!on) { px.set(x0 + i, y0 + j, (i + j) % 7 === 0 ? hex('#2a2834') : hex('#14131a'), 1, TAG.tv); continue; }
+      const u = (i - 2) / (w - 4), v = (j - 2) / (h - 4);
+      let c;
+      if (playing) {
+        const s = Math.sin(u * 6 + t / 400) + Math.sin(v * 5 - t / 500);
+        c = s > 0.6 ? hex('#fb7299') : s > -0.4 ? hex('#4fb7e6') : hex('#2f7fb0');
+        if ((j + Math.floor(t / 80)) % 9 === 0) c = mix(c, [255, 255, 255], 0.25);
+      } else { // 等着开播：粉色底 + 转圈的小点
+        c = hex('#fb7299');
+        const a = t / 300;
+        for (let k = 0; k < 3; k++) {
+          const cx = 0.5 + Math.cos(a + k * 2.1) * 0.12, cy = 0.5 + Math.sin(a + k * 2.1) * 0.2;
+          if (Math.hypot((u - cx) * 1.6, v - cy) < 0.07) c = hex('#ffffff');
+        }
+      }
+      px.set(x0 + i, y0 + j, c, 1, TAG.tv);
+    }
+    px.set(x0 + w - 3, y0 + h - 2, on ? hex('#7ed491') : hex('#a04040'));
+  });
+  if (on) px.lights.push([OX, OY - 10, 40, [180, 220, 255], 0.08]);
 }
 
 // ---------- 小零件 ----------
@@ -794,7 +1003,7 @@ function glow(px, cx, cy, r, c, a) {
 function tintAll(px, c, a) {
   const b = px.b;
   for (let i = 0; i < b.length; i += 4) {
-    if (!b[i + 3]) continue;
+    if (!b[i + 3] || px.emit[i >> 2]) continue; // 发光的东西不压暗
     b[i] += (c[0] - b[i]) * a; b[i + 1] += (c[1] - b[i + 1]) * a; b[i + 2] += (c[2] - b[i + 2]) * a;
   }
 }
@@ -807,9 +1016,87 @@ function dimHalf(px, side) {
     b[i] *= 0.45; b[i + 1] *= 0.45; b[i + 2] *= 0.55;
   }
 }
-function skyColor(h) {
-  if (h >= 6 && h < 9) return { top: hex('#9fd3f0'), bottom: hex('#ffd9a8'), sun: true };
-  if (h >= 9 && h < 17) return { top: hex('#6fb8ec'), bottom: hex('#bfe4fb'), sun: true };
-  if (h >= 17 && h < 19) return { top: hex('#6f74c9'), bottom: hex('#ff9e7a') };
-  return { top: hex('#141a3a'), bottom: hex('#2a2f5e'), stars: true, moon: true };
+function skyColor(name) {
+  switch (name) {
+    case 'dawn': return { top: hex('#a9c8ef'), bottom: hex('#ffc9a3'), sunDisk: true };
+    case 'day': return { top: hex('#6fb8ec'), bottom: hex('#bfe4fb') };
+    case 'dusk': return { top: hex('#6f74c9'), bottom: hex('#ff9e7a'), sunDisk: true };
+    default: return { top: hex('#141a3a'), bottom: hex('#2a2f5e'), stars: true, moon: true };
+  }
+}
+
+// ---------- 收到屏幕边缘：两只从边上探出半个脑袋 ----------
+export const PW = 18;
+export const PH = 30;
+const PEEK_CAT = [
+  '.........K......',
+  '........kK.....K',
+  '........kkk...kk',
+  '.......kkkkkkkkk',
+  '......kkkkkkkkkk',
+  '......kywkkkkkkk',
+  '......kyykkkkkkk',
+  '......pkkkkkkkkk',
+  '.......kkpkkkkkk',
+  '........kkkkkkkk',
+  '.....kk.kkkkkkkk',
+  '.....kkk.kkkkkkk',
+];
+const PEEK_JELLY = [
+  '..........jjjjjj',
+  '........jjwwjjjj',
+  '.......jjwjjjjjj',
+  '......jjjjjjjjjj',
+  '......jjejjjjjjj',
+  '......jpjjjjjjjj',
+  '......JJJJJJJJJJ',
+  '.......l.l..l.l.',
+  '......l..l.l..l.',
+  '.....l..l...l...',
+];
+export function createPeek() {
+  const buf = new Uint8ClampedArray(PW * PH * 4);
+  const set = (x, y, c, a = 1) => {
+    if (x < 0 || y < 0 || x >= PW || y >= PH) return;
+    const i = (y * PW + x) * 4;
+    const ba = buf[i + 3] / 255, na = a + ba * (1 - a);
+    for (let k = 0; k < 3; k++) buf[i + k] = (c[k] * a + buf[i + k] * ba * (1 - a)) / na;
+    buf[i + 3] = na * 255;
+  };
+  let mirror = false; // 收在左边时整幅镜像
+  const sprite = (rows, x0, y0, pal, alpha = 1) => rows.forEach((row, r) => {
+    for (let c = 0; c < row.length; c++) {
+      const col = pal[row[c]];
+      if (!col) continue;
+      const x = x0 + c;
+      set(mirror ? PW - 1 - x : x, y0 + r, col, alpha);
+    }
+  });
+  // state: { cat: {online, activity}, jelly: {...}, unread }
+  function render(state, t) {
+    buf.fill(0);
+    mirror = state.side === 'left';
+    // 每隔一会儿往外多探一点，再缩回去
+    const lean = (phase) => { const p = ((t + phase) % 6000) / 6000; return p < 0.15 ? Math.round(Math.sin((p / 0.15) * Math.PI) * 2) : 0; };
+    const jOn = state.jelly && state.jelly.online, cOn = state.cat && state.cat.online;
+    // 水母（上面），轻轻上下飘
+    let jr = PEEK_JELLY;
+    const jBlink = !jOn || state.jelly.activity === 'sleep' || t % 4300 < 160;
+    if (jBlink) jr = jr.map((r) => r.replace('e', 'J'));
+    const jb = Math.round(Math.sin(t / 700));
+    sprite(jr, PW - 16 - lean(0), 2 + jb, JELLY_PAL, jOn ? 0.95 : 0.55);
+    // 小黑猫（下面），偶尔动一下耳朵
+    let cr = PEEK_CAT;
+    const cBlink = !cOn || state.cat.activity === 'sleep' || (t + 1700) % 3900 < 150;
+    if (cBlink) cr = cr.map((r) => r.replace(/y/g, 'k').replace('w', 'k'));
+    if ((t % 5000) < 200) cr = cr.map((r, i) => (i === 0 ? r.replace('K', '.') : r));
+    sprite(cr, PW - 16 - lean(2500), 16, { ...CAT_PAL, w: hex('#ffffff') }, cOn ? 1 : 0.6);
+    // 收起时 TA 发来了消息：一个小粉心一跳一跳
+    if (state.unread) {
+      const y0 = 13 + (Math.floor(t / 400) % 2);
+      [[1, 0], [3, 0], [0, 1], [1, 1], [2, 1], [3, 1], [4, 1], [1, 2], [2, 2], [3, 2], [2, 3]].forEach(([x, y]) => set(mirror ? PW - 3 - x : 2 + x, y0 + y, hex('#f05a78')));
+    }
+    return buf;
+  }
+  return { render, buf };
 }

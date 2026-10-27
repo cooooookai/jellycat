@@ -170,7 +170,7 @@ function loop(t) { drawScene(t); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 // ================= 状态 =================
-const ACT_TEXT = { gpt: '在和 GPT 干活', claude: '在和 Claude 搭积木', kimi: '在和 Kimi 聊', doubao: '在和豆包聊天', bili: '在逛 B 站', web: '在上网', away: '在浏览器外面忙', sleep: '睡着了', game: '在打游戏', meeting: '在开会', work: '在电脑前忙' };
+const ACT_TEXT = { gpt: '在和 GPT 干活', claude: '在和 Claude 搭积木', kimi: '在和 Kimi 聊', doubao: '在和豆包聊天', bili: '在逛 B 站', web: '在上网', away: '在浏览器外面忙', sleep: '睡着了', game: '在打游戏', meeting: '在开会', work: '在电脑前忙', edit: '在剪视频', wechat: '在回微信' };
 
 function render(s) {
   st = s;
