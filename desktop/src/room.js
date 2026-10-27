@@ -594,17 +594,34 @@ function lift(t, props) {
   return Math.abs(Math.sin((t / period) * Math.PI)) * 6;
 }
 
+// 软硅胶：碰到肚子时变短、底部鼓出来；抬起时先弹长一点再回去
+function softToy(squash, stretch) {
+  const body = 9 - squash + stretch; // 中间段的行数
+  const rows = ['..sss..', ...Array(body).fill('.shsss.')];
+  if (squash >= 2) rows.push('sshssss', 'sssssss', '.ddddd.'); // 压扁：底下两行往外鼓
+  else if (squash === 1) rows.push('.sssss.', 'sssssss', '..ddd..');
+  else rows.push('.sssss.', '.sssss.', '..ddd..');
+  return rows;
+}
+
 function drawMassage(px, t, cp, jp, props) {
   const [cx, cy] = P(cp[0], cp[1], cp[2]);
   const [jx, jy] = P(jp[0], jp[1], jp[2]);
-  const up = Math.round(lift(t, props));
-  // 硅胶棒：底端对着小猫肚子（肚子在小猫身子偏左的位置）
-  const tx = Math.round(cx - 4), bottom = Math.round(cy - 3) - up; // 捶到时底端压进肚子里一点
-  const ty = bottom - TOY_UP.length;
-  px.sprite(TOY_UP, tx, ty, TOY_PAL, { tag: TAG.toy });
+  const period = props.fast ? 420 : 1300;
+  const raw = Math.sin((t / period) * Math.PI);
+  const rising = raw * Math.cos((t / period) * Math.PI) > 0; // 正在往上抬
+  const upF = Math.abs(raw) * 6;
+  const up = Math.round(upF);
+  const squash = upF < 0.6 ? 2 : upF < 1.6 ? 1 : 0;
+  const stretch = rising && upF > 1.6 && upF < 3.6 ? 1 : 0; // 刚弹起来那一下拉长
+  const TOY_NOW = softToy(squash, stretch);
+  // 硅胶棒：底端对着小猫肚子；捶到时底端压进肚子里一点
+  const tx = Math.round(cx - 5), bottom = Math.round(cy - 3) - up;
+  const ty = bottom - TOY_NOW.length;
+  px.sprite(TOY_NOW, tx, ty, TOY_PAL, { tag: TAG.toy });
   // 一根触手从水母伞盖下面伸过来，卷在硅胶棒中间
   const sx = jx - 3, sy = jy - 4 + Math.round(up / 3); // 触手根部
-  const ex = tx + 5, ey = ty + 5;                       // 卷住的地方
+  const ex = tx + 6, ey = ty + 5;                       // 卷住的地方
   for (let i = 0; i <= 12; i++) {
     const p = i / 12;
     const x = sx + (ex - sx) * p;
@@ -614,10 +631,10 @@ function drawMassage(px, t, cp, jp, props) {
   // 卷住的一圈
   for (const [dx, dy] of [[0, -1], [-1, -1], [-2, -1], [-3, -1], [-4, -1], [-4, 0], [-4, 1], [-3, 1], [-1, 1]]) px.set(ex + dx, ey + dy, C.tent);
   // 捶到的瞬间：肚子上冒两颗小星星
-  if (up === 0) {
-    px.set(tx - 2, bottom + 1, hex('#fff6c8'));
-    px.set(tx + 6, bottom, hex('#fff6c8'));
-    px.set(tx + 2, bottom - 2, hex('#fff6c8'), 0.6);
+  if (squash >= 2) {
+    px.set(tx - 2, bottom, hex('#fff6c8'));
+    px.set(tx + 8, bottom - 1, hex('#fff6c8'));
+    px.set(tx + 3, bottom - 13, hex('#fff6c8'), 0.5);
   }
 }
 
