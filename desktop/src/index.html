@@ -29,11 +29,13 @@
       border: 2px solid #2a2030; box-shadow: 2px 2px 0 rgba(0,0,0,.35); outline: none;
     }
     #coins {
-      position: absolute; display: none; transform: translate(-50%, -100%); align-items: center; gap: 4px; pointer-events: none; white-space: nowrap;
+      /* 右下角，贴着房间地板的右下边 */
+      position: absolute; right: 6%; bottom: 13%; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap;
       padding: 2px 7px 2px 4px; font: 700 11px/1.2 ui-monospace, Menlo, monospace; color: #5a3d1a;
       background: rgba(255, 246, 220, .82); border: 2px solid #5a3d1a; cursor: pointer;
-      box-shadow: 2px 2px 0 rgba(0,0,0,.25);
+      box-shadow: 2px 2px 0 rgba(0,0,0,.25); opacity: .8; transition: opacity .2s;
     }
+    #coins:hover { opacity: 1; }
     #coins i { width: 10px; height: 10px; background: #f2c14a; border: 2px solid #b8862a; border-radius: 50%; box-sizing: border-box; }
     #coins.bump { animation: bump .4s steps(3); }
     @keyframes bump { 50% { transform: scale(1.25); } }
@@ -57,7 +59,7 @@
   <canvas id="room"></canvas>
   <input id="input" maxlength="200" spellcheck="false">
   <div id="badge"></div>
-  <div id="coins"><i></i><b>0</b></div>
+  <div id="coins" title="小卖部"><i></i><b>0</b></div>
   <div id="previewTag">预览中</div>
   <script type="module" src="app.js"></script>
 </body>

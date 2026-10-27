@@ -1098,7 +1098,6 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     }));
     if (screenColor(jAct, t, 0.5, 0.5)) px.lights.push([...P(55, 10, 16), 12, [190, 220, 255], 0.07]);
     if (L.jellyDeskTop) drawSmall(px, t, L.jellyDeskTop, ...P(62, 8, 15), per);
-    drawPiggy(px, t, props, spots); // 金色小猪存钱罐（点它打开小卖部）
   } });
 
   objs.push({ d: 61, draw: () => {

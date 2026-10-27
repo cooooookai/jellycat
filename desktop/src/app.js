@@ -64,7 +64,7 @@ function layout() {
   cv.style.width = w * k + 'px';
   cv.style.height = h * k + 'px';
   for (const b of bubbles) b.el.style.display = peek ? 'none' : '';
-  coinEl.style.display = 'none';
+  coinEl.style.display = peek ? 'none' : '';
   jc.resize(Math.round(w * k), Math.round(h * k));
 }
 jc.onPeek((side) => {
@@ -88,12 +88,13 @@ jc.onState((s) => {
 function showBadge(t) { badge.style.display = t ? 'block' : 'none'; badge.textContent = t || ''; }
 
 // ---------- 金币 ----------
-const coinEl = document.getElementById('coins'); // 鼠标停在小猪上时显示的金币数
+const coinEl = document.getElementById('coins'); // 右下角的金币按钮，点开小卖部
 let coinAt = null; // 最近一次进账的时间（小猪身上掉金币）
 const previewEl = document.getElementById('previewTag');
 function renderCoins() { coinEl.querySelector('b').textContent = econ.balance; }
 jc.econGet().then((v) => { if (v) { econ = v; renderCoins(); } });
 jc.onEcon((v) => { econ = v; renderCoins(); });
+coinEl.addEventListener('click', () => jc.openShop());
 jc.onPreview((p) => { preview = p; previewEl.style.display = p ? 'block' : 'none'; });
 jc.onEarned(({ who, amt }) => {
   // 头上飘一个 +N
@@ -105,7 +106,7 @@ jc.onEarned(({ who, amt }) => {
   el.style.left = x * k + 'px';
   el.style.top = (y - 2) * k + 'px';
   setTimeout(() => el.remove(), 1600);
-  setTimeout(() => { coinAt = performance.now(); }, 500); // 飘一会儿再掉进小猪里
+  coinEl.classList.remove('bump'); void coinEl.offsetWidth; coinEl.classList.add('bump');
 });
 
 // ---------- 咕嘟声：发消息、收消息时轻轻响一下 ----------
@@ -276,9 +277,7 @@ window.addEventListener('mousemove', (e) => {
   const overUi = e.target !== cv && e.target !== document.body && e.target !== document.documentElement;
   const hit = hitAt(e);
   setSolid(!!hit || overUi || inputOpen);
-  const pig = hit === 'piggy' && room.spots.piggy;
-  coinEl.style.display = pig && !peek ? 'flex' : 'none';
-  if (pig) { coinEl.style.left = room.spots.piggy[0] * k + 'px'; coinEl.style.top = (room.spots.piggy[1] - 3) * k + 'px'; }
+
   const clicky = ['cat', 'jelly', 'tv', 'drawer', 'toy', 'bag', 'bowlCat', 'bowlJelly', 'piggy'];
   cv.style.cursor = clicky.includes(hit) ? 'pointer' : hit ? 'grab' : 'default';
 });
