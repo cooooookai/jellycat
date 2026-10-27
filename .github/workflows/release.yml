@@ -1,0 +1,57 @@
+# 推一个 v* 标签，就在 GitHub 的 Mac 机器上自动打包并发布 Release
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装依赖
+        working-directory: desktop
+        run: npm install
+
+      - name: 打包（Apple 芯片 + Intel）
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac dir --arm64 --x64 --publish never
+
+      - name: 本地签名并压缩
+        run: |
+          mkdir -p out
+          for pair in "mac-arm64:arm64" "mac:x64"; do
+            dir="${pair%%:*}"; arch="${pair##*:}"
+            app="desktop/dist/$dir/JellyCat.app"
+            codesign --force --deep --sign - "$app"
+            codesign --verify --deep --strict "$app"
+            ditto -c -k --keepParent "$app" "out/JellyCat-mac-$arch.zip"
+          done
+          (cd . && zip -qr out/JellyCat-chrome-extension.zip extension)
+          ls -la out
+
+      - name: 发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then TAG="v$(node -p "require('./desktop/package.json').version")"; fi
+          NOTES="docs/release-notes/${TAG}.md"
+          [ -f "$NOTES" ] || NOTES=/dev/null
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" out/* --clobber
+          else
+            gh release create "$TAG" out/* --title "$TAG" --notes-file "$NOTES" --target "${GITHUB_SHA}"
+          fi
