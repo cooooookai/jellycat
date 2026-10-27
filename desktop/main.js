@@ -7,6 +7,8 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { startRelay } = require('./relay.cjs');
 const { Link } = require('./net');
+const { Econ } = require('./econ');
+const { pathToFileURL } = require('node:url');
 const { classify, watchForeground } = require('./activity');
 
 // 测试用：指定一个独立的配置目录，可以在一台电脑上同时开"猫"和"水母"
@@ -116,8 +118,57 @@ function refreshMine() {
     myActivity = a;
     link.send({ t: 'activity', activity: a });
     applyGameHide();
+    if (a && a !== 'away') earnFirst('act:' + a);
   }
   pushState();
+}
+
+// ---------- 金币 ----------
+let econ = null;
+let catalog = null;
+let shopWin = null;
+const ymd = (d = new Date(), tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const paired = () => !!(cfg.room && cfg.secret);
+function earnFirst(kind) {
+  // 每天每种行动 / 状态第一次：随机 1～3 枚
+  if (!econ || !paired()) return;
+  const amt = catalog.EARN.firstMin + Math.floor(Math.random() * (catalog.EARN.firstMax - catalog.EARN.firstMin + 1));
+  econ.earn(`first:${cfg.who}:${ymd()}:${kind}`, amt, cfg.who, kind);
+}
+function checkDaily() {
+  if (!econ || !paired() || !link.connected) return;
+  econ.earn('gift:welcome', catalog.EARN.welcome, cfg.who, 'welcome'); // 开张礼：两边算出来是同一笔
+  econ.earn(`login:${cfg.who}:${ymd()}`, catalog.EARN.login, cfg.who, 'login');
+  // 两个人当天都在线：用东京的日期算，两边算出来是同一笔，不会重复
+  if (side(other(cfg.who)).online) econ.earn(`together:${ymd(new Date(), 'Asia/Tokyo')}`, catalog.EARN.together, cfg.who, 'together');
+}
+let econSyncTimer = null;
+function pushEcon() {
+  if (!econ) return;
+  const v = econ.view();
+  if (win && !win.isDestroyed()) win.webContents.send('econ', v);
+  if (shopWin && !shopWin.isDestroyed()) shopWin.webContents.send('econ', v);
+  clearTimeout(econSyncTimer);
+  econSyncTimer = setTimeout(() => link.send({ t: 'act', kind: 'econ', state: econ.snapshot() }), 300);
+}
+async function initEcon() {
+  catalog = await import(pathToFileURL(path.join(__dirname, 'src', 'catalog.mjs')).href);
+  econ = new Econ(path.join(app.getPath('userData'), 'econ.json'), catalog);
+  econ.on('change', pushEcon);
+  econ.on('earned', (e) => { if (win && !win.isDestroyed()) win.webContents.send('earned', { who: e.who, amt: e.amt }); });
+  pushEcon();
+  checkDaily();
+  setInterval(checkDaily, 60 * 1000);
+}
+function openShop() {
+  if (shopWin && !shopWin.isDestroyed()) { shopWin.focus(); return; }
+  shopWin = new BrowserWindow({
+    width: 560, height: 680, minWidth: 460, minHeight: 500, title: '小卖部', backgroundColor: '#16151d',
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
+  });
+  shopWin.loadFile(path.join(__dirname, 'src', 'shop.html'));
+  shopWin.on('closed', () => { shopWin = null; if (win && !win.isDestroyed()) win.webContents.send('preview', null); });
 }
 
 function side(who) {
@@ -213,6 +264,7 @@ function menuTemplate() {
     { label: page ? `叫 TA 一起看：${trim(page.title || page.url, 18)}` : '叫 TA 一起看（先在 Chrome 打开 B 站视频）', enabled: !!page && link.connected, click: () => inviteWatch() },
     { label: '叫 TA 开会…', enabled: link.connected, click: () => win && win.webContents.send('input', { mode: 'meeting', prefill: meetingFromClipboard() }) },
     { type: 'separator' },
+    { label: '🪙 小卖部…', click: openShop },
     { label: '房间时间', submenu: [['auto', '跟着真实时间'], ['dawn', '清晨'], ['day', '白天'], ['dusk', '黄昏'], ['night', '夜晚'], ['late', '深夜']]
       .map(([v, l]) => ({ label: l, type: 'radio', checked: (cfg.period || 'auto') === v, click: () => { cfg.period = v; saveCfg(); win && win.webContents.send('period', v); } })) },
     { label: '大小', submenu: [1, 1.5, 2, 3].map((s) => ({ label: s + '×', type: 'radio', checked: cfg.scale === s, click: () => setScale(s) })) },
@@ -260,10 +312,15 @@ link.on('msg', (m) => {
 });
 // 房间里的互动（抽屉、吃饭、电视……）：两个人的小房间保持一样
 link.on('act', (m) => {
+  if (m.kind === 'econ') { if (econ) econ.merge(m.state); return; }
   if (win) win.webContents.send('act', m);
   if (m.kind === 'tv') openBiliIfNoExtension();
 });
-link.on('peer-online', (who) => { if (who !== cfg.who && win) win.webContents.send('peer-online'); });
+link.on('peer-online', (who) => {
+  if (who !== cfg.who && win) win.webContents.send('peer-online');
+  if (who !== cfg.who && econ) { link.send({ t: 'act', kind: 'econ', state: econ.snapshot() }); checkDaily(); }
+});
+link.on('welcome', () => { if (econ) { link.send({ t: 'act', kind: 'econ', state: econ.snapshot() }); checkDaily(); } });
 
 // 双击电视：插件开着就交给插件打开 B 站；没装插件就用默认浏览器打开
 function openBiliIfNoExtension() {
@@ -355,6 +412,12 @@ ipcMain.on('send-msg', (e, text) => {
   text = String(text || '').trim().slice(0, 200);
   if (text) link.send({ t: 'msg', text });
 });
+ipcMain.handle('econ-get', () => (econ ? econ.view() : null));
+ipcMain.handle('econ-buy', (e, id) => (econ ? econ.buy(id, cfg.who) : { error: '还没准备好' }));
+ipcMain.handle('econ-equip', (e, { slot, item }) => (econ ? econ.equip(slot, item) : { error: '还没准备好' }));
+ipcMain.on('shop-preview', (e, p) => { if (win && !win.isDestroyed()) win.webContents.send('preview', p); });
+ipcMain.on('open-shop', openShop);
+ipcMain.on('earn-first', (e, kind) => { if (/^[a-z]{2,12}$/.test(String(kind))) earnFirst('do:' + kind); });
 ipcMain.on('send-act', (e, a) => { if (a && typeof a.kind === 'string') link.send({ t: 'act', ...a }); });
 ipcMain.on('tv-together', () => { link.send({ t: 'act', kind: 'tv' }); openBiliIfNoExtension(); });
 ipcMain.on('poke', () => link.send({ t: 'msg', poke: true, target: other(cfg.who), text: '' }));
@@ -448,6 +511,7 @@ app.whenReady().then(() => {
   setInterval(pushState, 60 * 1000);
 
   startLocalConfig();
+  initEcon().catch((e) => console.error('金币系统没启动：', e));
   restart();
   if (!cfg.room || !cfg.secret) openSettings();
 

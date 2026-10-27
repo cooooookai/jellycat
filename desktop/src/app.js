@@ -17,6 +17,8 @@ let scale = 2;
 let inputOpen = false; // 输入框开着吗
 let inputMode = 'msg';
 let period = 'auto'; // 房间时间：auto 或者手动指定
+let econ = { balance: 0, equip: {} }; // 两人共用的金币和房间里摆的东西
+let preview = null; // 商店里正在预览的 { slot, item }
 let k = 2; // 每个原始像素在页面上占多少 CSS 像素
 let st = {
   me: 'cat', connected: false, configured: false, hour: new Date().getHours(),
@@ -62,6 +64,7 @@ function layout() {
   cv.style.width = w * k + 'px';
   cv.style.height = h * k + 'px';
   for (const b of bubbles) b.el.style.display = peek ? 'none' : '';
+  coinEl.style.display = peek ? 'none' : '';
   jc.resize(Math.round(w * k), Math.round(h * k));
 }
 jc.onPeek((side) => {
@@ -83,6 +86,27 @@ jc.onState((s) => {
   else showBadge(null);
 });
 function showBadge(t) { badge.style.display = t ? 'block' : 'none'; badge.textContent = t || ''; }
+
+// ---------- 金币 ----------
+const coinEl = document.getElementById('coins');
+const previewEl = document.getElementById('previewTag');
+function renderCoins() { coinEl.querySelector('b').textContent = econ.balance; }
+jc.econGet().then((v) => { if (v) { econ = v; renderCoins(); } });
+jc.onEcon((v) => { econ = v; renderCoins(); });
+jc.onPreview((p) => { preview = p; previewEl.style.display = p ? 'block' : 'none'; });
+coinEl.addEventListener('click', () => jc.openShop());
+jc.onEarned(({ who, amt }) => {
+  // 头上飘一个 +N
+  const el = document.createElement('div');
+  el.className = 'earn';
+  el.textContent = '+' + amt;
+  document.body.appendChild(el);
+  const [x, y] = anchor(who);
+  el.style.left = x * k + 'px';
+  el.style.top = (y - 2) * k + 'px';
+  setTimeout(() => el.remove(), 1600);
+  coinEl.classList.remove('bump'); void coinEl.offsetWidth; coinEl.classList.add('bump');
+});
 
 // ---------- 咕嘟声：发消息、收消息时轻轻响一下 ----------
 let audio = null;
@@ -209,7 +233,8 @@ function frame() {
     tvWait: wall < shared.tvWaitUntil && !st.cat.together,
     drag,
   };
-  const buf = room.render({ ...st, period: period === 'auto' ? null : period, props }, now);
+  const equip = preview ? { ...econ.equip, [preview.slot]: preview.item } : econ.equip;
+  const buf = room.render({ ...st, period: period === 'auto' ? null : period, props, equip }, now);
   drawHearts(buf, now);
   img.data.set(buf);
   ctx.putImageData(img, 0, 0);
@@ -298,6 +323,7 @@ function dropProp(dr, e) {
     if (hit === myBowl() || near) {
       updateShared({ ['eat_' + st.me]: true });
       bubble(st.me, '🍚 去吃饭啦', null, 3000);
+      jc.earnFirst('meal');
     }
     return;
   }
@@ -307,6 +333,7 @@ function dropProp(dr, e) {
     if (hit === 'jelly' || nearJelly) {
       if (!(st.cat.online && st.jelly.online)) { bubble(st.me, '要等 TA 也在线哦', null, 2500); return; }
       updateShared({ toy: 'jelly', massage: true, eat_cat: false, eat_jelly: false });
+      jc.earnFirst('massage');
     }
   }
 }
@@ -315,7 +342,7 @@ function click(hit) {
   if (hit === 'drawer') {
     // 抽屉：开着的时候再点一下，一切恢复原样
     if (shared.drawerOpen) updateShared({ drawerOpen: false, toy: 'drawer', massage: false });
-    else updateShared({ drawerOpen: true });
+    else { updateShared({ drawerOpen: true }); jc.earnFirst('drawer'); }
     return;
   }
   if (shared.massage && (hit === 'jelly' || hit === 'toy')) {
@@ -326,12 +353,14 @@ function click(hit) {
     const text = COMFY[Math.floor(Math.random() * COMFY.length)];
     bubble('cat', text, null, 2500);
     jc.sendAct({ kind: 'comfy', text });
+    jc.earnFirst('comfy');
     return;
   }
   if (hit === st.me) openInput('msg');
   else if (hit === partner() && st[partner()].online) {
     hearts.push({ who: partner(), t0: performance.now() });
     jc.poke();
+    jc.earnFirst('poke');
   }
 }
 
@@ -342,6 +371,7 @@ cv.addEventListener('dblclick', (e) => {
     updateShared({ tvWaitUntil: Date.now() + 120000 });
     jc.tvTogether();
     bubble(st.me, '📺 一起看 B 站吧', null, 4000);
+    jc.earnFirst('tv');
   }
   if (hit === myBowl() && shared['eat_' + st.me]) finishMeal();
 });
@@ -377,6 +407,7 @@ input.addEventListener('keydown', (e) => {
       jc.sendMsg(v);
       bubble(st.me, v);
       gudu(0.04);
+      jc.earnFirst('msg');
     }
   }
   closeInput();
