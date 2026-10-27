@@ -320,6 +320,7 @@ const CAT_BELLY = [
 ];
 // 软软的肉色硅胶圆柱
 const TOY = ['.ss.', 'shss', 'shss', 'shss', 'shss', 'shss', 'shss', 'ssss', 'dddd'];
+const TOY_UP = ['.sss.', 'shsss', 'shsss', 'shsss', 'shsss', 'shsss', 'shsss', 'shsss', 'shsss', 'shsss', 'sssss', '.ddd.'];
 const TOY_PAL = { s: hex('#f1bfa4'), h: hex('#fbe0d0'), d: hex('#d49a80') };
 // 猫粮袋
 const BAG = [
@@ -373,7 +374,7 @@ export function periodOf(h) {
 // 一个 96×96 的房间。左墙 x = 0，后墙 y = 0，最里面的墙角放电视。
 const SPOTS = {
   cat: { desk: [22, 55, 0], tv: [26, 38, 0], sleep: [24, 82, 3], idle: [42, 68, 0], eat: [34, 83, 0], massage: [36, 40, 0] },
-  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14], eat: [80, 19, 6], massage: [38, 42, 7] },
+  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14], eat: [80, 19, 6], massage: [43.5, 32.5, 8] },
 };
 const BOWL = { cat: [38, 88], jelly: [76, 15] };
 const DRAWER = { x: 0, y: 72, w: 10, d: 10, h: 12 };
@@ -486,6 +487,13 @@ export function createRoom() {
     if (cp) objs.push({ d: cp[0] + cp[1], draw: () => drawCat(px, t, cp, cs, cat, heads) });
     if (jp) objs.push({ d: jp[0] + jp[1] + 0.01, draw: () => drawJelly(px, t, jp, js, jelly, heads, props) });
     objs.push({ d: 124.5, draw: () => drawBowlFront(px, t) }); // 鱼缸的玻璃在睡觉的水母前面
+    // 按摩：硅胶棒竖着悬在小猫肚子上方，水母在右边用一根触手卷着它上下捶
+    const catIn = cs === 'massage' && cp && dist(cp, SPOTS.cat.massage) < 0.5;
+    const jellyIn = js === 'massage' && jp && dist(jp, SPOTS.jelly.massage) < 0.5;
+    if (props.massage && catIn && jellyIn) {
+      cat.squash = lift(t, props) < 0.6;
+      objs.push({ d: 999, draw: () => drawMassage(px, t, cp, jp, props) });
+    }
     objs.sort((a, b) => a.d - b.d);
     for (const o of objs) o.draw();
     drawTV(px, t, together || props.tvWait, together);
@@ -523,7 +531,11 @@ function drawCat(px, t, cp, cs, cat, heads) {
   const fast = cat.activity === 'game' ? 3 : 1;
   const f = Math.floor((t * fast) / 600) % 2;
   let spr, w = 12, h = 11, flip = false, ox = 0;
-  if (arrived && cs === 'massage') { spr = CAT_BELLY[Math.floor(t / 900) % 2]; w = 16; h = 7; }
+  if (arrived && cs === 'massage') {
+    spr = CAT_BELLY[Math.floor(t / 900) % 2];
+    w = 16; h = 7;
+    if (cat.squash) spr = [spr[0].replace(/k/g, '.'), ...spr.slice(1)]; // 被捶到：小爪子缩一下，身子扁一点
+  }
   else if (arrived && cs === 'sleep') { spr = CAT_SLEEP[Math.floor(t / 1400) % 2]; w = 14; h = 7; }
   else if (arrived && (cs === 'desk' || cs === 'tv')) { spr = CAT_BACK[f]; flip = cs === 'tv'; }
   else if (arrived && cs === 'eat') { // 低头吃饭，一点一点
@@ -560,30 +572,53 @@ function drawJelly(px, t, jp, js, jelly, heads, props) {
   else if (arrived && (js === 'desk' || js === 'tv' || js === 'eat')) spr = spr.map((r) => r.replace(/[ep]/g, 'j'));
   else if (t % 4200 < 160) spr = spr.map((r) => r.replace(/e/g, 'J'));
 
-  // 按摩：水母抱着硅胶棒上下慢慢捶，点水母会变快
-  let pound = 0;
-  if (massaging && arrived) {
-    const period = props.fast ? 420 : 1300;
-    pound = Math.abs(Math.sin((t / period) * Math.PI));
-  }
-  const x0 = sx - 5.5, y0 = sy - 13 + (sleeping || massaging ? 0 : bob) + Math.round(pound * 3);
+  const x0 = sx - 5.5, y0 = sy - 13 + (sleeping ? 0 : massaging ? Math.round(lift(t, props) / 3) : bob);
   const [fx, fy] = P(jp[0], jp[1], 0);
   px.rect(Math.round(fx - 3), Math.round(fy), 7, 1, [0, 0, 0], Math.max(0.08, 0.25 - jp[2] / 80));
   px.lights.push([sx, sy - 7, 10, [170, 235, 250], sleeping ? 0.05 : 0.09]);
   px.glowing(() => px.sprite(spr, x0, y0, JELLY_PAL, { alpha: sleeping ? 0.8 : 0.95, tag: TAG.jelly }));
-  if (props.toy === 'jelly') {
+  if (props.toy === 'jelly' && !(massaging && arrived)) {
     // 硅胶棒抱在触手里：竖着，下端随动作往下捶
-    const tx = massaging ? sx - 2 : sx + 4, ty = y0 + 9 + Math.round(pound * 5);
+    const tx = sx + 4, ty = y0 + 9; // 走过去的路上先抱着
     px.sprite(TOY, tx, ty, TOY_PAL, { tag: TAG.toy });
-    if (massaging && arrived && pound > 0.97) { // 捶到的瞬间冒一点小星星
-      px.set(tx - 1, ty + 9, hex('#fff6c8'));
-      px.set(tx + 5, ty + 8, hex('#fff6c8'));
-    }
   }
   if (sleeping) drawZ(px, sx + 6, sy - 16, t);
   if (arrived && js === 'eat') drawCrumbs(px, t, ...P(BOWL.jelly[0], BOWL.jelly[1], 2));
   heads.jelly = [sx, y0 - 2];
   if (arrived && js === 'desk') drawNpc(px, jelly.activity, sx + 13, sy - 1, t);
+}
+
+// 硅胶棒离小猫肚子有多高：0 = 正捶在肚子上，6 = 抬到最高
+function lift(t, props) {
+  const period = props.fast ? 420 : 1300;
+  return Math.abs(Math.sin((t / period) * Math.PI)) * 6;
+}
+
+function drawMassage(px, t, cp, jp, props) {
+  const [cx, cy] = P(cp[0], cp[1], cp[2]);
+  const [jx, jy] = P(jp[0], jp[1], jp[2]);
+  const up = Math.round(lift(t, props));
+  // 硅胶棒：底端对着小猫肚子（肚子在小猫身子偏左的位置）
+  const tx = Math.round(cx - 4), bottom = Math.round(cy - 6) - up;
+  const ty = bottom - TOY_UP.length;
+  px.sprite(TOY_UP, tx, ty, TOY_PAL, { tag: TAG.toy });
+  // 一根触手从水母伞盖下面伸过来，卷在硅胶棒中间
+  const sx = jx - 3, sy = jy - 4 + Math.round(up / 3); // 触手根部
+  const ex = tx + 5, ey = ty + 5;                       // 卷住的地方
+  for (let i = 0; i <= 12; i++) {
+    const p = i / 12;
+    const x = sx + (ex - sx) * p;
+    const y = sy + (ey - sy) * p + Math.sin(p * Math.PI) * 3 + Math.sin(t / 250 + p * 4) * 0.6;
+    px.set(Math.round(x), Math.round(y), C.tent);
+  }
+  // 卷住的一圈
+  for (const [dx, dy] of [[0, -1], [-1, -1], [-2, -1], [-3, -1], [-4, -1], [-4, 0], [-4, 1], [-3, 1], [-1, 1]]) px.set(ex + dx, ey + dy, C.tent);
+  // 捶到的瞬间：肚子上冒两颗小星星
+  if (up === 0) {
+    px.set(tx - 2, bottom + 1, hex('#fff6c8'));
+    px.set(tx + 6, bottom, hex('#fff6c8'));
+    px.set(tx + 2, bottom - 2, hex('#fff6c8'), 0.6);
+  }
 }
 
 function drawCrumbs(px, t, bx, by) {
