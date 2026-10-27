@@ -3,15 +3,36 @@
 
 export const META = { name: '你画我猜', icon: '🎨', desc: '一个人画，一个人猜。笔画是实时出现的，像在背上写字。' };
 
-const WORDS = {
-  食物: ['火锅', '西瓜', '冰淇淋', '饺子', '奶茶', '寿司', '拉面', '汉堡', '煎蛋', '月饼', '烤串', '草莓', '香蕉', '小笼包', '薯条', '蛋糕', '爆米花', '可乐', '粽子', '包子', '披萨', '咖啡', '烤鸭', '章鱼烧'],
-  动物: ['猫', '水母', '兔子', '企鹅', '长颈鹿', '章鱼', '蜗牛', '熊猫', '金鱼', '刺猬', '恐龙', '螃蟹', '狗', '蝴蝶', '鲸鱼', '猫头鹰', '乌龟', '小鸡', '蛇', '狮子'],
-  东西: ['雨伞', '眼镜', '手机', '耳机', '牙刷', '枕头', '台灯', '钥匙', '剪刀', '吉他', '帽子', '袜子', '镜子', '气球', '风筝', '电视', '闹钟', '口红', '书包', '自行车', '飞机', '帐篷', '蜡烛', '相机'],
-  地方: ['海边', '电影院', '机场', '游乐园', '图书馆', '便利店', '医院', '学校', '厨房', '山顶', '地铁', '寺庙'],
-  动作: ['跳绳', '游泳', '睡觉', '打哈欠', '跳舞', '钓鱼', '打喷嚏', '刷牙', '放风筝', '滑雪', '照镜子', '打电话'],
-  我们俩: ['牵手', '拥抱', '视频通话', '行李箱', '机票', '晚安', '戒指', '情书', '吃醋', '撒娇', '约会', '亲亲', '比心', '烟花', '摩天轮', '求婚', '早安', '想你'],
+// 每次给画的人三个选项：一个「日常」（好画），一个「有梗」（画出来就好笑），一个「我们俩」（或者 TA 出的题）。
+// 有梗的那一档是节目效果的来源：成语和俗语只能照字面画（对牛弹琴就得真画一头牛在听琴），
+// 网络梗和倒霉瞬间要靠表情和动作，画的过程本身就是笑点。
+const LANES = {
+  日常: {
+    食物: ['火锅', '西瓜', '冰淇淋', '饺子', '奶茶', '寿司', '拉面', '汉堡', '煎蛋', '月饼', '烤串', '草莓', '榴莲', '小笼包', '薯条', '蛋糕', '爆米花', '粽子', '披萨', '烤鸭', '章鱼烧', '冰糖葫芦', '螺蛳粉', '方便面', '饭团'],
+    动物: ['水母', '黑猫', '兔子', '企鹅', '长颈鹿', '章鱼', '蜗牛', '熊猫', '金鱼', '刺猬', '恐龙', '螃蟹', '柯基', '鲸鱼', '猫头鹰', '乌龟', '羊驼', '树懒', '火烈鸟', '袋鼠', '仓鼠', '海豹'],
+    东西: ['雨伞', '眼镜', '耳机', '牙刷', '枕头', '台灯', '钥匙', '吉他', '袜子', '气球', '风筝', '闹钟', '口红', '自行车', '帐篷', '蜡烛', '相机', '保温杯', '插排', '拖把', '充电宝', '电风扇', '马桶', '体重秤', '自拍杆'],
+    地方: ['海边', '电影院', '机场', '游乐园', '便利店', 'KTV', '厨房', '山顶', '地铁', '温泉', '监狱', '健身房'],
+  },
+  有梗: {
+    成语: ['对牛弹琴', '画蛇添足', '守株待兔', '掩耳盗铃', '井底之蛙', '狐假虎威', '鸡飞狗跳', '七上八下', '三头六臂', '胸有成竹', '火上浇油', '打草惊蛇', '一石二鸟', '鸡同鸭讲', '望穿秋水', '对酒当歌', '狼吞虎咽', '见钱眼开', '张牙舞爪', '亡羊补牢', '杯弓蛇影', '画饼充饥', '盲人摸象', '如坐针毡'],
+    俗语: ['瞎猫碰上死耗子', '天上掉馅饼', '热锅上的蚂蚁', '落汤鸡', '拍马屁', '吹牛', '背锅', '放鸽子', '打脸', '一根筋', '纸老虎', '癞蛤蟆想吃天鹅肉', '猪队友', '铁饭碗'],
+    网络梗: ['躺平', '摸鱼', '内卷', '社恐', '画饼', '吃瓜', '柠檬精', '戏精', '破防', '摆烂', '社死', '大冤种', '显眼包', '打工人', '干饭', '早八', '秃头', '熬夜', '断舍离', '电子榨菜', '发疯文学', '已读不回'],
+    倒霉瞬间: ['踩到乐高', '被蚊子咬', '撞玻璃门', '落枕', '打嗝停不下来', '腿麻了', '手机砸脸', '鬼压床', '抢红包', '晕车', '起床气', '跪地求饶', '偷吃被抓', '头发打结', '脚趾踢到桌角'],
+    人物: ['孙悟空', '猪八戒', '哪吒', '贞子', '圣诞老人', '美人鱼', '嫦娥', '月老', '财神爷', '孟婆', '外星人', '僵尸', '木乃伊'],
+  },
+  我们俩: {
+    恋爱: ['牵手', '拥抱', '公主抱', '壁咚', '摸头杀', '亲亲', '比心', '一见钟情', '暗送秋波', '花前月下', '吃醋', '撒娇', '冷战', '哄人', '恋爱脑', '狗粮', '情侣装', '查岗', '秒回', '晚安吻', '抢被子', '剥虾', '求婚', '戒指', '情书', '纪念日', '床头吵架床尾和'],
+    异地: ['视频通话', '异地恋', '机票', '行李箱', '接机', '送机', '想你', '晚安', '早安', '时差', '新干线', '高铁', '牛郎织女', '鹊桥', '快递', '一起看电影'],
+    东京广州: ['东京塔', '广州塔', '富士山', '早茶', '肠粉', '拉面', '樱花', '烟花大会', '便利店饭团', '珍珠奶茶', '小蛮腰'],
+  },
 };
-const ALL = Object.entries(WORDS).flatMap(([cat, ws]) => ws.map((w) => ({ cat, w })));
+const POOL = Object.fromEntries(Object.entries(LANES).map(([lane, cats]) => [lane, Object.entries(cats).flatMap(([cat, ws]) => ws.map((w) => ({ lane, cat, w })))]));
+const rand = (a) => a[Math.floor(Math.random() * a.length)];
+
+// TA 出的题：存在自己电脑上，开局时发给 TA，TA 画的时候会抽到
+const CUSTOM_KEY = 'jc_draw_custom';
+function loadCustom() { try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]').filter((x) => typeof x === 'string').slice(0, 200); } catch { return []; } }
+function saveCustom(list) { try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(list.slice(0, 200))); } catch {} }
 
 const COLORS = ['#2a2030', '#e05a6f', '#4a8fe0', '#f2c14a', '#5fbf6a', '#8a5a3a', '#ffffff'];
 const CW = 480, CH = 360; // 画布逻辑尺寸
@@ -36,6 +57,9 @@ export function mount(root, ctx) {
   let outBuf = null;
   let flushTimer = null;
   let lastEnd = null;
+  let fromPartner = []; // TA 出给我画的题
+  const usedCustom = new Set();
+  let myCustom = loadCustom(); // 我出给 TA 画的题
 
   const iDraw = () => drawer === ctx.me;
 
@@ -55,6 +79,11 @@ export function mount(root, ctx) {
       <button id="dSend" class="gold">猜</button>
     </div>
     <div id="dLog" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    <details id="dCustom" style="margin-top:12px">
+      <summary class="hint" style="cursor:pointer">💌 给 TA 出题（只有 TA 画的时候会抽到，你们俩的梗写在这里最好笑）</summary>
+      <div class="row" style="margin-top:6px"><input type="text" id="dCIn" placeholder="比如：你上次在机场睡着" style="flex:1" maxlength="16"><button id="dCAdd">加</button></div>
+      <div id="dCList" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    </details>
   `;
   const $ = (id) => root.querySelector('#' + id);
   const cv = $('dCv');
@@ -172,15 +201,20 @@ export function mount(root, ctx) {
     renderLog();
     renderTools();
     if (iDraw()) {
-      const opts = [];
-      while (opts.length < 3) { const w = ALL[Math.floor(Math.random() * ALL.length)]; if (!opts.some((o) => o.w === w.w)) opts.push(w); }
+      const opts = [rand(POOL.日常), rand(POOL.有梗)];
+      const fresh = fromPartner.filter((w) => !usedCustom.has(w));
+      if (fresh.length && Math.random() < 0.6) opts.push({ lane: '我们俩', cat: 'TA 出的题', w: rand(fresh), custom: true });
+      else opts.push(rand(POOL.我们俩));
       const o = overlay(`<div style="font-weight:700;margin-bottom:10px">轮到你画了，选一个 👇</div><div class="row" style="justify-content:center"></div>${lastEndHtml()}`);
       const row = o.querySelector('.row');
       for (const it of opts) {
         const b = document.createElement('button');
         b.className = 'gold';
-        b.textContent = it.w;
-        b.onclick = () => startRound(it);
+        b.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;min-width:96px';
+        b.innerHTML = '<span></span><small style="font-weight:400;font-size:10px;opacity:.7"></small>';
+        b.firstChild.textContent = it.w;
+        b.lastChild.textContent = it.custom ? '💌 TA 出的题' : `${it.lane} · ${it.cat}`;
+        b.onclick = () => { if (it.custom) usedCustom.add(it.w); startRound(it); };
         row.appendChild(b);
       }
     } else {
@@ -195,7 +229,7 @@ export function mount(root, ctx) {
 
   function startRound(it) {
     word = it.w;
-    hint = `${[...word].length} 个字 · ${it.cat}`;
+    hint = `${[...word].length} 个字 · ${it.custom ? 'TA 出的题' : it.cat}`;
     ctx.send('round', { hint, dur: ROUND });
     beginDraw(ROUND);
   }
@@ -282,6 +316,34 @@ export function mount(root, ctx) {
     $('dGuessRow').style.display = !iDraw() && phase === 'draw' ? '' : 'none';
   }
 
+  function renderCustom() {
+    const list = $('dCList');
+    list.innerHTML = '';
+    for (const w of myCustom) {
+      const t = document.createElement('span');
+      t.style.cssText = 'padding:2px 6px;background:var(--panel2);border:2px solid var(--line);cursor:pointer';
+      t.title = '点一下删掉';
+      t.textContent = w + ' ✕';
+      t.onclick = () => { myCustom = myCustom.filter((x) => x !== w); saveCustom(myCustom); ctx.send('custom', { words: myCustom }); renderCustom(); };
+      list.appendChild(t);
+    }
+    if (!myCustom.length) list.innerHTML = '<span class="hint">还没有</span>';
+  }
+  function addCustom() {
+    const inp = $('dCIn');
+    const v = inp.value.trim().slice(0, 16);
+    inp.value = '';
+    if (!v || myCustom.includes(v)) return;
+    myCustom = [v, ...myCustom];
+    saveCustom(myCustom);
+    ctx.send('custom', { words: myCustom });
+    renderCustom();
+  }
+  $('dCAdd').onclick = addCustom;
+  $('dCIn').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) addCustom(); });
+  renderCustom();
+  ctx.send('custom', { words: myCustom });
+
   pickScreen();
 
   return {
@@ -306,6 +368,14 @@ export function mount(root, ctx) {
           break;
         }
         case 'end': if (!iDraw() && phase === 'draw') onEnd(m); break;
+        case 'custom':
+          if (Array.isArray(m.words)) {
+            const had = fromPartner.length;
+            fromPartner = m.words.map((w) => String(w).slice(0, 16)).filter(Boolean).slice(0, 200);
+            // TA 刚出了新题，而我正在选题：刷新一下选项
+            if (!had && fromPartner.length && phase === 'pick' && iDraw()) pickScreen();
+          }
+          break;
       }
     },
     destroy() { clearInterval(timer); clearTimeout(flushTimer); },
