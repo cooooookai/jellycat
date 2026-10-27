@@ -65,6 +65,7 @@ function layout() {
   cv.style.height = h * k + 'px';
   for (const b of bubbles) b.el.style.display = peek ? 'none' : '';
   coinEl.style.display = peek ? 'none' : '';
+  gamesEl.style.display = peek ? 'none' : '';
   jc.resize(Math.round(w * k), Math.round(h * k));
 }
 jc.onPeek((side) => {
@@ -95,6 +96,8 @@ function renderCoins() { coinEl.querySelector('b').textContent = econ.balance; }
 jc.econGet().then((v) => { if (v) { econ = v; renderCoins(); } });
 jc.onEcon((v) => { econ = v; renderCoins(); });
 coinEl.addEventListener('click', () => jc.openShop());
+const gamesEl = document.getElementById('games'); // 金币旁边的小街机按钮，点开游戏厅
+gamesEl.addEventListener('click', () => jc.openGames());
 jc.onPreview((p) => { preview = p; previewEl.style.display = p ? 'block' : 'none'; });
 jc.onEarned(({ who, amt }) => {
   // 头上飘一个 +N
@@ -139,7 +142,7 @@ function bubble(who, text, url, ms) {
   const el = document.createElement('div');
   el.className = 'bubble' + (url ? ' link' : '');
   el.textContent = text;
-  if (url) el.onclick = () => jc.openUrl(url);
+  if (url) el.onclick = () => (url === 'jc:games' ? jc.openGames() : jc.openUrl(url));
   document.body.appendChild(el);
   const life = ms || Math.min(20000, 5000 + text.length * 250);
   const b = { who, el, until: performance.now() + life, url };
@@ -177,7 +180,7 @@ jc.onMsg((m) => {
   if (m.poke) { hearts.push({ who: m.target || st.me, t0: performance.now() }); return; }
   if (m.text) {
     if (peek && m.who !== st.me) unread = m; // 收着的时候先记下，展开再冒出来
-    else bubble(m.who, m.text, m.url);
+    else bubble(m.who, m.text, m.game ? 'jc:games' : m.url);
     if (m.who !== st.me) gudu();
   }
 });

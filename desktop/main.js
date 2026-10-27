@@ -174,6 +174,34 @@ function openShop() {
   shopWin.on('closed', () => { shopWin = null; if (win && !win.isDestroyed()) win.webContents.send('preview', null); });
 }
 
+// ---------- 游戏厅 ----------
+let gamesWin = null;
+function openGames() {
+  if (gamesWin && !gamesWin.isDestroyed()) { gamesWin.show(); gamesWin.focus(); return; }
+  gamesWin = new BrowserWindow({
+    width: 560, height: 700, minWidth: 480, minHeight: 600, title: '游戏厅', backgroundColor: '#16151d',
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
+  });
+  gamesWin.loadFile(path.join(__dirname, 'src', 'games.html'));
+  gamesWin.on('closed', () => { gamesWin = null; });
+  try { app.focus({ steal: true }); } catch {}
+}
+function gameStatus() {
+  return { me: cfg.who, connected: link.connected, partnerOnline: side(other(cfg.who)).online };
+}
+function sendGameStatus() { if (gamesWin && !gamesWin.isDestroyed()) gamesWin.webContents.send('game-status', gameStatus()); }
+const GAME_NAME = { draw: '你画我猜', bomb: '拆弹', luck: '猜拳 / 转盘' };
+function onGameAct(m) {
+  if (m.from === cfg.who) return;
+  if (gamesWin && !gamesWin.isDestroyed()) gamesWin.webContents.send('game', m);
+  else if (m.op === 'invite') {
+    const name = GAME_NAME[m.g] || '游戏';
+    notify(`${NAME[m.from]} 叫你玩${name}`, '点一下打开游戏厅', openGames);
+    win && win.webContents.send('msg', { who: m.from, text: `🎮 来玩${name}！`, game: true });
+  }
+}
+
 function side(who) {
   const ext = link.dev(who, 'ext');
   const desk = link.dev(who, 'desk');
@@ -268,6 +296,7 @@ function menuTemplate() {
     { label: '叫 TA 开会…', enabled: link.connected, click: () => openInputWin({ mode: 'meeting', prefill: meetingFromClipboard() }) },
     { type: 'separator' },
     { label: '🪙 小卖部…', click: openShop },
+    { label: '🎮 游戏厅…', click: openGames },
     { label: '房间时间', submenu: [['auto', '跟着真实时间'], ['dawn', '清晨'], ['day', '白天'], ['dusk', '黄昏'], ['night', '夜晚'], ['late', '深夜']]
       .map(([v, l]) => ({ label: l, type: 'radio', checked: (cfg.period || 'auto') === v, click: () => { cfg.period = v; saveCfg(); win && win.webContents.send('period', v); } })) },
     { label: '大小', submenu: [1, 1.5, 2, 3].map((s) => ({ label: s + '×', type: 'radio', checked: cfg.scale === s, click: () => setScale(s) })) },
@@ -319,7 +348,7 @@ function inviteWatch() {
 }
 
 // ---------- 收到消息 ----------
-link.on('change', () => { refreshMine(); });
+link.on('change', () => { refreshMine(); sendGameStatus(); });
 link.on('welcome', () => { link.send({ t: 'activity', activity: myActivity }); });
 link.on('msg', (m) => {
   if (!win) return;
@@ -329,6 +358,7 @@ link.on('msg', (m) => {
 // 房间里的互动（抽屉、吃饭、电视……）：两个人的小房间保持一样
 link.on('act', (m) => {
   if (m.kind === 'econ') { if (econ) econ.merge(m.state); return; }
+  if (m.kind === 'game') return onGameAct(m);
   if (win) win.webContents.send('act', m);
   if (m.kind === 'tv') openBiliIfNoExtension();
 });
@@ -434,6 +464,14 @@ ipcMain.handle('econ-buy', (e, id) => (econ ? econ.buy(id, cfg.who) : { error: '
 ipcMain.handle('econ-equip', (e, { slot, item }) => (econ ? econ.equip(slot, item) : { error: '还没准备好' }));
 ipcMain.on('shop-preview', (e, p) => { if (win && !win.isDestroyed()) win.webContents.send('preview', p); });
 ipcMain.on('open-shop', openShop);
+ipcMain.on('open-games', openGames);
+ipcMain.handle('game-status', () => gameStatus());
+ipcMain.on('game-send', (e, a) => { if (a && typeof a.g === 'string') link.send({ t: 'act', kind: 'game', ...a }); });
+ipcMain.handle('earn-game', (e, id) => {
+  // 每天每个游戏第一次玩完 +1～3（和其他"第一次"一样，不让游戏变成印钞机）
+  if (!econ || !/^[a-z]+$/.test(String(id))) return;
+  earnFirst('game_' + id);
+});
 ipcMain.on('earn-first', (e, kind) => { if (/^[a-z]{2,12}$/.test(String(kind))) earnFirst('do:' + kind); });
 ipcMain.on('send-act', (e, a) => { if (a && typeof a.kind === 'string') link.send({ t: 'act', ...a }); });
 ipcMain.on('tv-together', () => { link.send({ t: 'act', kind: 'tv' }); openBiliIfNoExtension(); });
