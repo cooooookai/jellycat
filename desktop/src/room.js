@@ -374,7 +374,7 @@ export function periodOf(h) {
 // 一个 96×96 的房间。左墙 x = 0，后墙 y = 0，最里面的墙角放电视。
 const SPOTS = {
   cat: { desk: [22, 55, 0], tv: [26, 38, 0], sleep: [24, 82, 3], idle: [42, 68, 0], eat: [34, 83, 0], massage: [36, 40, 0] },
-  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14], eat: [80, 19, 6], massage: [43.5, 32.5, 8] },
+  jelly: { desk: [55, 22, 9], tv: [38, 26, 10], sleep: [84, 40, 6], idle: [66, 50, 14], eat: [78, 12, 9], massage: [43.5, 32.5, 8] },
 };
 const BOWL = { cat: [38, 88], jelly: [76, 15] };
 const DRAWER = { x: 0, y: 72, w: 10, d: 10, h: 12 };
@@ -903,10 +903,25 @@ function drawFurniture(px, t, th, cat, jelly, per, props, spots, objs) {
   for (const who of ['cat', 'jelly']) objs.push({ d: BOWL[who][0] + BOWL[who][1], draw: () => {
     const [bx, by] = P(BOWL[who][0], BOWL[who][1], 0);
     const full = props.eating && props.eating[who];
-    const col = who === 'cat' ? hex('#e87a7a') : hex('#7cc4dc');
-    px.sprite(['.wwwww.', 'wfffffw', 'ccccccc', '.ccccc.'], bx - 3.5, by - 4,
-      { w: full ? KIBBLE[1] : hex('#3a2a22'), f: full ? KIBBLE[0] : hex('#2a1e18'), c: col }, { tag: who === 'cat' ? TAG.bowlCat : TAG.bowlJelly });
-    if (full) { px.set(bx - 1, by - 5, KIBBLE[2]); px.set(bx + 1, by - 5, KIBBLE[0]); }
+    // 陶瓷小碗：奶白色碗口 + 一圈彩色碗身（猫是红的，水母是蓝的）+ 一个白色小爪印
+    const band = who === 'cat' ? hex('#e05a6f') : hex('#4a9fd0');
+    const bandDk = who === 'cat' ? hex('#b8445a') : hex('#3a80ab');
+    px.rect(Math.round(bx) - 5, Math.round(by), 11, 1, [0, 0, 0], 0.22);
+    px.sprite([
+      '.wwwwwwwww.',
+      'wfffffffffw',
+      'WfffffffffW',
+      'bbbbpbbbbbb',
+      '.bbbbbbbbB.',
+      '..BBBBBBB..',
+    ], bx - 5.5, by - 6, {
+      w: hex('#fff6e8'), W: hex('#e8dcc8'),
+      f: full ? KIBBLE[0] : hex('#5a4a44'),
+      b: band, B: bandDk, p: hex('#ffffff'),
+    }, { tag: who === 'cat' ? TAG.bowlCat : TAG.bowlJelly });
+    if (full) { // 堆起来的猫粮
+      [[-3, -6, 1], [-1, -7, 2], [1, -6, 0], [3, -6, 2], [0, -6, 1], [-2, -6, 2], [2, -7, 0]].forEach(([dx, dy, c]) => px.set(Math.round(bx) + dx, Math.round(by) + dy, KIBBLE[c]));
+    }
     spots['bowl' + (who === 'cat' ? 'Cat' : 'Jelly')] = [bx, by - 2];
   } });
 

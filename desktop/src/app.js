@@ -274,8 +274,20 @@ window.addEventListener('mouseup', (e) => {
   drag = null;
   if (d.dragging) { jc.dragEnd(); return; }
   if (d.hit === 'peek') { jc.unpeek(); return; } // 点一下展开
+  // 正在吃饭：点一下自己的小动物，或者点碗附近，就吃完了
+  if (shared['eat_' + st.me]) {
+    const [x, y] = px(e);
+    const bowl = room.spots[myBowl()];
+    const nearBowl = bowl && Math.hypot(x - bowl[0], y - bowl[1]) < 12;
+    if (d.hit === st.me || d.hit === myBowl() || nearBowl) { finishMeal(); return; }
+  }
   click(d.hit);
 });
+
+function finishMeal() {
+  updateShared({ ['eat_' + st.me]: false });
+  bubble(st.me, '吃饱啦～', null, 2500);
+}
 
 function dropProp(dr, e) {
   const hit = hitAt(e);
@@ -331,10 +343,7 @@ cv.addEventListener('dblclick', (e) => {
     jc.tvTogether();
     bubble(st.me, '📺 一起看 B 站吧', null, 4000);
   }
-  if (hit === myBowl() && shared['eat_' + st.me]) {
-    updateShared({ ['eat_' + st.me]: false });
-    bubble(st.me, '吃饱啦～', null, 2500);
-  }
+  if (hit === myBowl() && shared['eat_' + st.me]) finishMeal();
 });
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); jc.menu(); });
 
