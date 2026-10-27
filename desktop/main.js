@@ -264,7 +264,7 @@ function menuTemplate() {
     { label: link.connected ? `已连上${link.rtt != null ? ' · ' + link.rtt + 'ms' : ''}` : (link.error || '连接中…'), enabled: false },
     { type: 'separator' },
     { label: '发消息…', click: () => win && win.webContents.send('input', { mode: 'msg' }) },
-    { label: page ? `叫 TA 一起看：${trim(page.title || page.url, 18)}` : '叫 TA 一起看（先在 Chrome 打开 B 站视频）', enabled: !!page && link.connected, click: () => inviteWatch() },
+    { label: page ? `叫 TA 一起看：${trim(page.title || page.url, 18)}` : '叫 TA 一起看（先在浏览器打开 B 站视频）', enabled: !!page && link.connected, click: () => inviteWatch() },
     { label: '叫 TA 开会…', enabled: link.connected, click: () => win && win.webContents.send('input', { mode: 'meeting', prefill: meetingFromClipboard() }) },
     { type: 'separator' },
     { label: '🪙 小卖部…', click: openShop },

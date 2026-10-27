@@ -163,6 +163,8 @@ function onServer(m) {
       }
       if (m.kind && m.kind !== 'watch') break; // 开会邀请交给桌面端
       partner.invite = { page: m.page, at: Date.now() };
+      // TA 叫我一起看：我没在放别的视频，就直接跟过去；正在看别的就只弹通知，不打断
+      if (m.page && !(myPage && myPage.key === m.page.key) && !amPlaying()) { gotoPage(m.page, m.time); pushStatus(); break; }
       if (m.page) {
         chrome.notifications.create('invite', {
           type: 'basic',
@@ -245,13 +247,25 @@ let tvTabId = null;
 let sharedKey = null;
 let shareTimer = null;
 
+function amPlaying() {
+  for (const e of ports.values()) if (e.last && e.last.playing && Date.now() - e.last.at < 3000) return true;
+  return false;
+}
+function saveTv() { chrome.storage.session?.set({ tv: { watchStart, watchUntil, tvTabId } }).catch?.(() => {}); }
+chrome.storage.session?.get('tv').then((d) => {
+  const tv = d && d.tv;
+  if (tv && tv.watchUntil > Date.now() && !watchUntil) ({ watchStart, watchUntil, tvTabId } = tv);
+}).catch(() => {});
+
 async function openTv() {
   watchStart = Date.now();
   watchUntil = watchStart + 10 * 60 * 1000;
   sharedKey = null;
+  saveTv();
   try {
     const tab = await chrome.tabs.create({ url: 'https://www.bilibili.com/', active: true });
     tvTabId = tab.id;
+    saveTv();
     await chrome.windows.update(tab.windowId, { focused: true });
   } catch {}
 }
@@ -372,7 +386,12 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     if (m.t === 'getStatus') return reply(status());
     if (m.t === 'goto') { await gotoPage(partner.page); return reply(true); }
     if (m.t === 'gotoInvite') { await gotoPage(partner.invite && partner.invite.page); return reply(true); }
-    if (m.t === 'invite') { reply(toPartner({ t: 'invite', kind: 'watch', page: myPage })); return; }
+    if (m.t === 'invite') {
+      const e = myTabId != null && ports.get(myTabId);
+      const time = e && e.last && Date.now() - e.last.at < 5000 ? e.last.time : undefined;
+      reply(toPartner({ t: 'invite', kind: 'watch', page: myPage, time }));
+      return;
+    }
     if (m.t === 'reconnect') { reconnect(); return reply(true); }
     reply(null);
   })();

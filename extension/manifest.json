@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "小水母 & 小黑猫",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "两个人一起看 B 站：一键去 TA 那里，同一个进度，暂停一起暂停，卡一起卡。",
   "permissions": [
     "storage",
