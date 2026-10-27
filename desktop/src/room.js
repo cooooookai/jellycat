@@ -1194,10 +1194,20 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
         'pPpPpPpPpPpPp',
       ], bcx - 6.5, bcy - 14, { p: hex('#f3b6c8'), P: hex('#e2a0b6') });
     } else {
+      // 圆鱼缸：一缸蓝蓝的水 + 底下的沙子 + 一根晃来晃去的小水草（水母睡觉的地方）
       for (let j = -7; j <= 7; j++) for (let i = -7; i <= 7; i++) {
         if (Math.hypot(i, j) > 7) continue;
-        px.set(Math.round(bcx + i), Math.round(bcy - 7 + j), [150, 220, 240], j > -3 ? 0.3 : 0.12);
+        const x = Math.round(bcx + i), y = Math.round(bcy - 7 + j);
+        if (j < -3) px.set(x, y, [200, 236, 248], 0.15); // 水面以上
+        else if (j >= 5) px.set(x, y, hash(i + 20, j) > 0.5 ? hex('#e8d4a8') : hex('#d8c090')); // 沙子
+        else px.set(x, y, mix(hex('#7cc8e4'), hex('#4fa8d0'), (j + 3) / 8), 0.75); // 水
       }
+      for (let k = 0; k < 6; k++) { // 小水草
+        const sway = Math.round(Math.sin(t / 600 + k / 2) * (k / 6) * 1.5);
+        px.set(Math.round(bcx - 3) + sway, Math.round(bcy - 3 - k), k % 2 ? hex('#59b67f') : hex('#3f9a6a'));
+      }
+      px.set(Math.round(bcx + 3), Math.round(bcy - 3), hex('#f3b6c8')); // 一颗粉色小石头
+      px.set(Math.round(bcx + 4), Math.round(bcy - 3), hex('#f3b6c8'));
     }
   } });
   objs.push({ d: 124.5, draw: () => drawBedFront(px, t, L.jellyBed) });
@@ -1331,7 +1341,7 @@ function drawBedFront(px, t, b) {
   }
   px.line([bcx - 4, bcy - 14], [bcx + 4, bcy - 14], [225, 248, 255], 0.7);
   px.line([bcx - 5, bcy - 10], [bcx - 5, bcy - 6], [255, 255, 255], 0.7);
-  px.line([bcx - 3, bcy - 4], [bcx + 3, bcy - 4], [120, 200, 230], 0.5);
+  px.line([bcx - 6, bcy - 11], [bcx + 6, bcy - 11], [210, 245, 255], 0.8); // 水面
   const p = (t % 2600) / 2600;
   px.set(Math.round(bcx + 3 + Math.sin(p * 6)), Math.round(bcy - 3 - p * 9), [240, 252, 255], 0.8 * (1 - p));
 }
