@@ -599,7 +599,7 @@ function drawMassage(px, t, cp, jp, props) {
   const [jx, jy] = P(jp[0], jp[1], jp[2]);
   const up = Math.round(lift(t, props));
   // 硅胶棒：底端对着小猫肚子（肚子在小猫身子偏左的位置）
-  const tx = Math.round(cx - 4), bottom = Math.round(cy - 6) - up;
+  const tx = Math.round(cx - 4), bottom = Math.round(cy - 3) - up; // 捶到时底端压进肚子里一点
   const ty = bottom - TOY_UP.length;
   px.sprite(TOY_UP, tx, ty, TOY_PAL, { tag: TAG.toy });
   // 一根触手从水母伞盖下面伸过来，卷在硅胶棒中间
