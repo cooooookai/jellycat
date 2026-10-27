@@ -188,11 +188,23 @@ function onServer(m) {
   }
 }
 
+// 把 TA 在看什么告诉每个 B 站页面（页面右下角的「去 TA 那里」）
+function partnerMsg() { return { t: 'partner', online: partner.online, page: partner.page }; }
+let lastPartnerJson = '';
+function broadcastPartner(force) {
+  const msg = partnerMsg();
+  const j = JSON.stringify(msg);
+  if (!force && j === lastPartnerJson) return;
+  lastPartnerJson = j;
+  for (const { port } of ports.values()) try { port.postMessage(msg); } catch {}
+}
+
 // ---------- 和 B 站页面通信 ----------
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'sync' || !port.sender || !port.sender.tab) return;
   const tabId = port.sender.tab.id;
   ports.set(tabId, { port, key: null, page: null });
+  try { port.postMessage(partnerMsg()); } catch {}
 
   port.onMessage.addListener((m) => {
     const entry = ports.get(tabId);
@@ -377,6 +389,7 @@ function status() {
   };
 }
 function pushStatus() {
+  broadcastPartner();
   chrome.runtime.sendMessage({ t: 'status', status: status() }).catch(() => {});
 }
 

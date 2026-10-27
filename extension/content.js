@@ -152,6 +152,7 @@
   }
 
   function onRemote(m) {
+    if (m.t === 'partner') return showPartner(m);
     if (!video || !key) return;
 
     if (m.t === 'ctl' && m.action === 'nav') {
@@ -225,6 +226,7 @@
         autoPaused = false;
         loadedAt = Date.now();
         reportPage(true);
+        renderPill();
       }
     }
   }
@@ -272,6 +274,38 @@
     s = Math.max(0, Math.floor(s));
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  }
+
+  // ---------- 页面上的「去 TA 那里」：TA 在看别的视频时，右下角一直挂着，不用去插件里找 ----------
+  let pillEl = null;
+  let lastPartner = null;
+  let dismissedKey = null;
+  function showPartner(m) {
+    lastPartner = m;
+    renderPill();
+  }
+  function renderPill() {
+    const m = lastPartner;
+    const pp = m && m.online && m.page;
+    const show = pp && pp.key !== key && pp.key !== dismissedKey;
+    if (!show) { if (pillEl) pillEl.style.display = 'none'; return; }
+    if (!document.body) return;
+    if (!pillEl) {
+      pillEl = document.createElement('div');
+      pillEl.setAttribute('style', [
+        'position:fixed', 'right:16px', 'bottom:16px', 'z-index:2147483647', 'display:flex', 'align-items:center', 'gap:10px',
+        'max-width:360px', 'background:#1b1a24', 'color:#f3ead7', 'font:600 13px/1.3 -apple-system,"PingFang SC",sans-serif',
+        'padding:8px 8px 8px 12px', 'border:2px solid #f3ead7', 'box-shadow:4px 4px 0 #000',
+      ].join(';'));
+      pillEl.innerHTML = '<span class="jc-t" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0"></span>'
+        + '<button class="jc-go" style="flex:none;font:700 13px -apple-system,sans-serif;color:#1b1a24;background:#f2c14a;border:0;padding:6px 10px;box-shadow:2px 2px 0 #000;cursor:pointer">去 TA 那里 →</button>'
+        + '<button class="jc-x" title="先不去" style="flex:none;font:13px sans-serif;color:#8d8698;background:none;border:0;padding:4px;cursor:pointer">✕</button>';
+      pillEl.querySelector('.jc-go').onclick = () => { const p = lastPartner && lastPartner.page; if (p && p.url) location.href = p.url; };
+      pillEl.querySelector('.jc-x').onclick = () => { dismissedKey = lastPartner && lastPartner.page && lastPartner.page.key; renderPill(); };
+      document.body.appendChild(pillEl);
+    }
+    pillEl.querySelector('.jc-t').textContent = `${partnerIcon()} 在看：${pp.title || '一个视频'}`;
+    pillEl.style.display = 'flex';
   }
 
   connectPort();
