@@ -340,7 +340,7 @@ const KIBBLE = [hex('#a8642f'), hex('#c47a3a'), hex('#8e5228')];
 export const COMFY = ['呼噜噜…', '舒服～', '(=^･ω･^=)', 'ฅ^•ﻌ•^ฅ', '(ˊ˘ˋ*)♡', '再用力一点点…', '咕噜咕噜', '好舒服喵'];
 
 // 命中区编号
-export const TAG = { cat: 1, jelly: 2, npc: 3, tv: 4, drawer: 5, toy: 6, bag: 7, bowlCat: 8, bowlJelly: 9 };
+export const TAG = { cat: 1, jelly: 2, npc: 3, tv: 4, drawer: 5, toy: 6, bag: 7, bowlCat: 8, bowlJelly: 9, piggy: 10 };
 const TAG_NAME = Object.fromEntries(Object.entries(TAG).map(([k, v]) => [v, k]));
 
 // ---------- 五个时段：同一个房间，光线和小物件不一样 ----------
@@ -1155,6 +1155,9 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     if (per.nightlight) { px.glowing(() => px.sprite(['.mmm.', 'mMmMm'], nlx - 2, nly - 4, { m: hex('#ffb3a8'), M: hex('#fffbe8') })); px.lights.push([nlx, nly - 3, 24, [255, 190, 150], 0.2]); }
   } });
 
+  // 小猪存钱罐：两个人的金币都在这里（点它打开小卖部）
+  objs.push({ d: 39, draw: () => drawPiggy(px, t, props, spots) });
+
   // 窗台装饰位（窗台在左墙，算在墙后面）
   if (L.sill) objs.push({ d: 79, draw: () => drawSmall(px, t, L.sill, ...P(1.5, 80, 22), per) });
 
@@ -1252,6 +1255,36 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     ellipse(px, ...P(70, 62, 0), 6, 3, hex('#5d8fc9'));
     ellipse(px, ...P(70, 62, 1), 5, 2, hex('#7aa6dd'));
   }
+}
+
+const PIGGY = [
+  '...p.....p..',
+  '..pPp...pPp.',
+  '.pppppppppp.',
+  'pppppppppppp',
+  'pppkppppkppp',
+  'ppppppppSSpp',
+  'ppppppppSnSp',
+  'pppppppppSS.',
+  '.pppppppppp.',
+  '..pd.pd.pd..',
+];
+function drawPiggy(px, t, props, spots) {
+  const [x, y] = P(7, 32, 0);
+  const since = props.coinAt != null ? t - props.coinAt : 1e9;
+  const wiggle = since < 900 ? Math.round(Math.sin(since / 60) * (1 - since / 900)) : 0;
+  const x0 = Math.round(x - 6) + wiggle, y0 = Math.round(y - 10);
+  px.rect(Math.round(x) - 5, Math.round(y), 11, 1, [0, 0, 0], 0.22);
+  px.sprite(PIGGY, x0, y0, { p: hex('#f4a6c0'), P: hex('#e07a9a'), k: hex('#3a2a2a'), S: hex('#e88aa8'), n: hex('#b85a7a'), d: hex('#c96e8e') }, { tag: TAG.piggy });
+  px.rect(x0 + 4, y0 + 2, 3, 1, hex('#8a3a5a')); // 背上的投币口
+  px.set(x0 + 3, y0 + 3, hex('#ffd0e0')); // 一点高光
+  // 有金币进账：一枚金币从上面掉进投币口
+  if (since < 600) {
+    const p = since / 600;
+    const cy = y0 - 10 + Math.round(p * 11);
+    px.glowing(() => px.sprite(['.yy.', 'yYyy', 'yyyY', '.yy.'], x0 + 4, cy, { y: hex('#f2c14a'), Y: hex('#fff3b0') }));
+  }
+  spots.piggy = [x0 + 6, y0];
 }
 
 function drawCatBed(px, t, b, objs) {

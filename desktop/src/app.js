@@ -64,7 +64,7 @@ function layout() {
   cv.style.width = w * k + 'px';
   cv.style.height = h * k + 'px';
   for (const b of bubbles) b.el.style.display = peek ? 'none' : '';
-  coinEl.style.display = peek ? 'none' : '';
+  coinEl.style.display = 'none';
   jc.resize(Math.round(w * k), Math.round(h * k));
 }
 jc.onPeek((side) => {
@@ -88,13 +88,13 @@ jc.onState((s) => {
 function showBadge(t) { badge.style.display = t ? 'block' : 'none'; badge.textContent = t || ''; }
 
 // ---------- 金币 ----------
-const coinEl = document.getElementById('coins');
+const coinEl = document.getElementById('coins'); // 鼠标停在小猪上时显示的金币数
+let coinAt = null; // 最近一次进账的时间（小猪身上掉金币）
 const previewEl = document.getElementById('previewTag');
 function renderCoins() { coinEl.querySelector('b').textContent = econ.balance; }
 jc.econGet().then((v) => { if (v) { econ = v; renderCoins(); } });
 jc.onEcon((v) => { econ = v; renderCoins(); });
 jc.onPreview((p) => { preview = p; previewEl.style.display = p ? 'block' : 'none'; });
-coinEl.addEventListener('click', () => jc.openShop());
 jc.onEarned(({ who, amt }) => {
   // 头上飘一个 +N
   const el = document.createElement('div');
@@ -105,7 +105,7 @@ jc.onEarned(({ who, amt }) => {
   el.style.left = x * k + 'px';
   el.style.top = (y - 2) * k + 'px';
   setTimeout(() => el.remove(), 1600);
-  coinEl.classList.remove('bump'); void coinEl.offsetWidth; coinEl.classList.add('bump');
+  setTimeout(() => { coinAt = performance.now(); }, 500); // 飘一会儿再掉进小猪里
 });
 
 // ---------- 咕嘟声：发消息、收消息时轻轻响一下 ----------
@@ -232,6 +232,7 @@ function frame() {
     eating: eating(),
     tvWait: wall < shared.tvWaitUntil && !st.cat.together,
     drag,
+    coinAt,
   };
   const equip = preview ? { ...econ.equip, [preview.slot]: preview.item } : econ.equip;
   const buf = room.render({ ...st, period: period === 'auto' ? null : period, props, equip }, now);
@@ -275,7 +276,10 @@ window.addEventListener('mousemove', (e) => {
   const overUi = e.target !== cv && e.target !== document.body && e.target !== document.documentElement;
   const hit = hitAt(e);
   setSolid(!!hit || overUi || inputOpen);
-  const clicky = ['cat', 'jelly', 'tv', 'drawer', 'toy', 'bag', 'bowlCat', 'bowlJelly'];
+  const pig = hit === 'piggy' && room.spots.piggy;
+  coinEl.style.display = pig && !peek ? 'flex' : 'none';
+  if (pig) { coinEl.style.left = room.spots.piggy[0] * k + 'px'; coinEl.style.top = (room.spots.piggy[1] - 3) * k + 'px'; }
+  const clicky = ['cat', 'jelly', 'tv', 'drawer', 'toy', 'bag', 'bowlCat', 'bowlJelly', 'piggy'];
   cv.style.cursor = clicky.includes(hit) ? 'pointer' : hit ? 'grab' : 'default';
 });
 document.addEventListener('mouseleave', () => { if (!down && !inputOpen) setSolid(false); });
@@ -339,6 +343,7 @@ function dropProp(dr, e) {
 }
 
 function click(hit) {
+  if (hit === 'piggy') { jc.openShop(); return; } // 小猪存钱罐 = 小卖部
   if (hit === 'drawer') {
     // 抽屉：开着的时候再点一下，一切恢复原样
     if (shared.drawerOpen) updateShared({ drawerOpen: false, toy: 'drawer', massage: false });
