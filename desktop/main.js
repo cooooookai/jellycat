@@ -263,9 +263,9 @@ function menuTemplate() {
   return [
     { label: link.connected ? `已连上${link.rtt != null ? ' · ' + link.rtt + 'ms' : ''}` : (link.error || '连接中…'), enabled: false },
     { type: 'separator' },
-    { label: '发消息…', click: () => win && win.webContents.send('input', { mode: 'msg' }) },
+    { label: '发消息…', click: () => openInputWin({ mode: 'msg' }) },
     { label: page ? `叫 TA 一起看：${trim(page.title || page.url, 18)}` : '叫 TA 一起看（先在浏览器打开 B 站视频）', enabled: !!page && link.connected, click: () => inviteWatch() },
-    { label: '叫 TA 开会…', enabled: link.connected, click: () => win && win.webContents.send('input', { mode: 'meeting', prefill: meetingFromClipboard() }) },
+    { label: '叫 TA 开会…', enabled: link.connected, click: () => openInputWin({ mode: 'meeting', prefill: meetingFromClipboard() }) },
     { type: 'separator' },
     { label: '🪙 小卖部…', click: openShop },
     { label: '房间时间', submenu: [['auto', '跟着真实时间'], ['dawn', '清晨'], ['day', '白天'], ['dusk', '黄昏'], ['night', '夜晚'], ['late', '深夜']]
@@ -290,6 +290,19 @@ function setScale(s) {
   cfg.scale = s;
   saveCfg();
   if (win) win.webContents.send('scale', s);
+}
+
+// 从右键菜单打开输入框：菜单关掉后焦点会回到别的 App，输入框一失焦就关了，所以先把小房间拿到前面
+function openInputWin(payload) {
+  if (!win) return;
+  if (!win.isVisible()) win.showInactive();
+  unpeek();
+  setTimeout(() => {
+    try { app.focus({ steal: true }); } catch {}
+    win.focus();
+    win.webContents.focus();
+    win.webContents.send('input', payload);
+  }, 120);
 }
 
 function meetingFromClipboard() {
@@ -384,7 +397,8 @@ function collapse(b, side) {
   peekFrom = b;
   win.webContents.send('peek', side);
 }
-ipcMain.on('unpeek', () => {
+ipcMain.on('unpeek', () => unpeek());
+function unpeek() {
   if (!win || !peeking) return;
   peeking = false;
   const d = screen.getDisplayMatching(win.getBounds()).workArea;
@@ -392,7 +406,7 @@ ipcMain.on('unpeek', () => {
   // 展开回原来的高度，离右边留一点空，不会又立刻收起来
   restoreTo = { x: Math.min(Math.max(from.x, d.x + 16), d.x + d.width - from.width - 16), y: from.y };
   win.webContents.send('peek', false);
-});
+}
 ipcMain.on('menu', () => { if (win) Menu.buildFromTemplate(menuTemplate()).popup({ window: win }); });
 ipcMain.on('resize', (e, { w, h }) => {
   if (!win) return;

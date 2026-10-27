@@ -390,8 +390,10 @@ function openInput(mode, prefill = '') {
   input.style.display = 'block';
   setSolid(true);
   placeBubbles();
-  setTimeout(() => input.focus(), 0);
+  inputOpenedAt = Date.now();
+  setTimeout(() => input.focus(), 30);
 }
+let inputOpenedAt = 0;
 function closeInput() {
   inputOpen = false;
   input.style.display = 'none';
@@ -416,7 +418,12 @@ input.addEventListener('keydown', (e) => {
   }
   closeInput();
 });
-input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) closeInput(); }, 100));
+// 刚打开的一小会儿里失焦（窗口还在抢焦点）不算，重新拿回焦点
+input.addEventListener('blur', () => setTimeout(() => {
+  if (!inputOpen || document.activeElement === input) return;
+  if (Date.now() - inputOpenedAt < 1500) { input.focus(); return; }
+  closeInput();
+}, 100));
 
 // 给自动化测试用的入口（不影响正常使用）
 window.__jc = { click, dropProp, updateShared, shared: () => shared, room, st: () => st, peek: () => peek };
