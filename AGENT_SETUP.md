@@ -33,7 +33,15 @@ curl -fsSL https://raw.githubusercontent.com/cooooookai/jellycat/main/scripts/in
 bash /tmp/install-mac.sh "/完整路径/JellyCat-mac-Apple芯片.zip"
 ```
 
-连 raw.githubusercontent.com 也打不开时，手动做脚本里的事：
+**终端连不上 GitHub（比如"无法解析 github.com"），但用户的浏览器能打开时**——很常见：浏览器走了代理，终端或 AI 的沙盒没走。请用户用浏览器打开 https://github.com/cooooookai/jellycat/releases/latest ，点 `JellyCat-mac-arm64.zip`（Intel 选 x64）下载。Safari 可能会自动解压，在「下载」里得到 `JellyCat.app`，这时用：
+
+```bash
+ditto ~/Downloads/JellyCat.app /Applications/JellyCat.app
+xattr -cr /Applications/JellyCat.app
+open /Applications/JellyCat.app
+```
+
+连 raw.githubusercontent.com 也打不开、手上只有 zip 时，手动做脚本里的事：
 
 ```bash
 ditto -x -k "/完整路径/JellyCat-mac-Apple芯片.zip" /Applications
