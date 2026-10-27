@@ -1,0 +1,57 @@
+{
+  "name": "jelly-cat-room",
+  "productName": "JellyCat",
+  "version": "0.4.0",
+  "private": true,
+  "description": "桌面上的像素小房间：小黑猫和小水母各忙各的，偶尔一起看电视",
+  "author": "Cokai",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac zip --arm64 --x64",
+    "dist:win": "electron-builder --win"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "dev.cokai.jellycat",
+    "productName": "JellyCat",
+    "artifactName": "JellyCat-${version}-mac-${arch}.${ext}",
+    "files": [
+      "main.js",
+      "preload.js",
+      "activity.js",
+      "net.js",
+      "relay.cjs",
+      "src/**",
+      "assets/**"
+    ],
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "category": "public.app-category.lifestyle",
+      "icon": "assets/icon.png",
+      "identity": null,
+      "extendInfo": {
+        "CFBundleDisplayName": "小水母和小黑猫",
+        "LSUIElement": true,
+        "NSLocalNetworkUsageDescription": "两台电脑在同一个 Wi-Fi 下时，用来互相连接。"
+      }
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cooooookai/jellycat"
+  },
+  "license": "MIT"
+}

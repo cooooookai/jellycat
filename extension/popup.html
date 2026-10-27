@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>小水母 & 小黑猫</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <canvas id="scene" width="112" height="64"></canvas>
+
+  <div id="status" class="status"><span class="dot"></span><span id="statusText">…</span></div>
+
+  <section id="inviteBox" class="card invite" hidden>
+    <div class="label"><span id="inviteWho"></span> 叫你一起看</div>
+    <div class="title" id="inviteTitle"></div>
+    <button id="btnInvite">去 →</button>
+  </section>
+
+  <section class="card">
+    <div class="label"><span id="partnerIcon">🪼</span> TA</div>
+    <div class="title" id="partnerTitle">—</div>
+    <button id="btnGoto" disabled>去 TA 那里 →</button>
+  </section>
+
+  <section class="card">
+    <div class="label"><span id="meIcon">🐈‍⬛</span> 我</div>
+    <div class="title" id="meTitle">—</div>
+    <button id="btnCall" disabled>叫 TA 来看</button>
+  </section>
+
+  <details id="settings">
+    <summary>设置</summary>
+    <label>我是
+      <span class="who">
+        <label><input type="radio" name="who" value="cat"> 🐈‍⬛ 小黑猫</label>
+        <label><input type="radio" name="who" value="jelly"> 🪼 小水母</label>
+      </span>
+    </label>
+    <label>服务器 <input id="server" placeholder="wss://你的服务器"></label>
+    <label>房间号 <input id="room" placeholder="两个人填一样的"></label>
+    <label>密钥 <input id="secret" type="password" placeholder="两个人填一样的"></label>
+    <button id="btnSave">保存并连接</button>
+  </details>
+
+  <script src="popup.js"></script>
+</body>
+</html>

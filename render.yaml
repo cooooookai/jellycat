@@ -1,0 +1,14 @@
+# 一键部署中继服务器到 Render（免费方案，新加坡机房）
+services:
+  - type: web
+    name: jellycat-relay
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

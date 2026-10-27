@@ -1,0 +1,17 @@
+{
+  "name": "jelly-cat-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "小水母 & 小黑猫 两人中继服务器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
