@@ -83,8 +83,11 @@ const LOCAL_PORT = 28787;
 function startLocalConfig() {
   const srv = http.createServer((req, res) => {
     const origin = req.headers.origin || '';
-    if (!origin.startsWith('chrome-extension://') || req.url !== '/config') { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': origin });
+    // 有些浏览器的插件后台请求不带 Origin。允许：插件来源，或者完全没有 Origin 且 Host 就是本机这个端口
+    //（网页跨站请求一定带 Origin；DNS 重绑定攻击的 Host 会是攻击者的域名，过不了这一关）
+    const okOrigin = origin.startsWith('chrome-extension://') || (!origin && req.headers.host === `127.0.0.1:${LOCAL_PORT}`);
+    if (!okOrigin || req.url !== '/config') { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'content-type': 'application/json', ...(origin ? { 'access-control-allow-origin': origin } : {}) });
     res.end(JSON.stringify(cfg.room && cfg.secret ? { server: myServer(), room: cfg.room, secret: cfg.secret, who: cfg.who } : {}));
   });
   srv.on('error', () => {});
