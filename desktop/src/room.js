@@ -1098,6 +1098,7 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     }));
     if (screenColor(jAct, t, 0.5, 0.5)) px.lights.push([...P(55, 10, 16), 12, [190, 220, 255], 0.07]);
     if (L.jellyDeskTop) drawSmall(px, t, L.jellyDeskTop, ...P(62, 8, 15), per);
+    drawPiggy(px, t, props, spots); // 金色小猪存钱罐（点它打开小卖部）
   } });
 
   objs.push({ d: 61, draw: () => {
@@ -1154,9 +1155,6 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     px.sprite(['.mmm.', 'mMmMm', '..s..', '..s..'], nlx - 2, nly - 4, { m: hex('#f28c8c'), M: hex('#fff0f0'), s: hex('#f3ead7') });
     if (per.nightlight) { px.glowing(() => px.sprite(['.mmm.', 'mMmMm'], nlx - 2, nly - 4, { m: hex('#ffb3a8'), M: hex('#fffbe8') })); px.lights.push([nlx, nly - 3, 24, [255, 190, 150], 0.2]); }
   } });
-
-  // 小猪存钱罐：两个人的金币都在这里（点它打开小卖部）
-  objs.push({ d: 39, draw: () => drawPiggy(px, t, props, spots) });
 
   // 窗台装饰位（窗台在左墙，算在墙后面）
   if (L.sill) objs.push({ d: 79, draw: () => drawSmall(px, t, L.sill, ...P(1.5, 80, 22), per) });
@@ -1257,34 +1255,31 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
   }
 }
 
+// 金色小猪存钱罐：站在水母书桌左边（显示器旁边），两个人的金币都在里面
 const PIGGY = [
-  '...p.....p..',
-  '..pPp...pPp.',
-  '.pppppppppp.',
-  'pppppppppppp',
-  'pppkppppkppp',
-  'ppppppppSSpp',
-  'ppppppppSnSp',
-  'pppppppppSS.',
-  '.pppppppppp.',
-  '..pd.pd.pd..',
+  '.p....p.',
+  'pppppppp',
+  'pkpppPPp',
+  'ppppPnPp',
+  'pppppppp',
+  '.d.d.d..',
 ];
 function drawPiggy(px, t, props, spots) {
-  const [x, y] = P(7, 32, 0);
+  const [x, y] = P(46.5, 7, 15);
   const since = props.coinAt != null ? t - props.coinAt : 1e9;
   const wiggle = since < 900 ? Math.round(Math.sin(since / 60) * (1 - since / 900)) : 0;
-  const x0 = Math.round(x - 6) + wiggle, y0 = Math.round(y - 10);
-  px.rect(Math.round(x) - 5, Math.round(y), 11, 1, [0, 0, 0], 0.22);
-  px.sprite(PIGGY, x0, y0, { p: hex('#f4a6c0'), P: hex('#e07a9a'), k: hex('#3a2a2a'), S: hex('#e88aa8'), n: hex('#b85a7a'), d: hex('#c96e8e') }, { tag: TAG.piggy });
-  px.rect(x0 + 4, y0 + 2, 3, 1, hex('#8a3a5a')); // 背上的投币口
-  px.set(x0 + 3, y0 + 3, hex('#ffd0e0')); // 一点高光
-  // 有金币进账：一枚金币从上面掉进投币口
+  const x0 = Math.round(x - 4) + wiggle, y0 = Math.round(y - 6);
+  px.sprite(PIGGY, x0, y0, { p: hex('#f2c14a'), P: hex('#e0a838'), k: hex('#3a2a1a'), n: hex('#b8862a'), d: hex('#b8862a') }, { tag: TAG.piggy });
+  px.rect(x0 + 2, y0 + 1, 2, 1, hex('#8a6420')); // 背上的投币口
+  px.set(x0 + 1, y0 + 2, hex('#fff3b0')); // 金属高光
+  if (Math.floor(t / 2800) % 4 === 0 && t % 2800 < 300) px.set(x0 + 5, y0 + 1, hex('#ffffff')); // 偶尔闪一下
+  // 有金币进账：一枚小金币从上面掉进投币口
   if (since < 600) {
     const p = since / 600;
-    const cy = y0 - 10 + Math.round(p * 11);
-    px.glowing(() => px.sprite(['.yy.', 'yYyy', 'yyyY', '.yy.'], x0 + 4, cy, { y: hex('#f2c14a'), Y: hex('#fff3b0') }));
+    const cy = y0 - 8 + Math.round(p * 8);
+    px.glowing(() => px.sprite(['.y.', 'yYy', '.y.'], x0 + 2, cy, { y: hex('#f2c14a'), Y: hex('#fff3b0') }));
   }
-  spots.piggy = [x0 + 6, y0];
+  spots.piggy = [x0 + 4, y0];
 }
 
 function drawCatBed(px, t, b, objs) {
