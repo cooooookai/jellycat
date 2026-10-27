@@ -201,22 +201,32 @@ export function mount(root, ctx) {
     renderLog();
     renderTools();
     if (iDraw()) {
-      const opts = [rand(POOL.日常), rand(POOL.有梗)];
-      const fresh = fromPartner.filter((w) => !usedCustom.has(w));
-      if (fresh.length && Math.random() < 0.6) opts.push({ lane: '我们俩', cat: 'TA 出的题', w: rand(fresh), custom: true });
-      else opts.push(rand(POOL.我们俩));
-      const o = overlay(`<div style="font-weight:700;margin-bottom:10px">轮到你画了，选一个 👇</div><div class="row" style="justify-content:center"></div>${lastEndHtml()}`);
-      const row = o.querySelector('.row');
-      for (const it of opts) {
-        const b = document.createElement('button');
-        b.className = 'gold';
-        b.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;min-width:96px';
-        b.innerHTML = '<span></span><small style="font-weight:400;font-size:10px;opacity:.7"></small>';
-        b.firstChild.textContent = it.w;
-        b.lastChild.textContent = it.custom ? '💌 TA 出的题' : `${it.lane} · ${it.cat}`;
-        b.onclick = () => { if (it.custom) usedCustom.add(it.w); startRound(it); };
-        row.appendChild(b);
-      }
+      const o = overlay(`<div style="font-weight:700;margin-bottom:10px">轮到你画了，选一个 👇</div><div class="grid4" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:300px;margin:0 auto"></div><button class="ghost" style="margin-top:12px">🎲 再随机 4 个</button>${lastEndHtml()}`);
+      const grid = o.querySelector('.grid4');
+      const deal = () => {
+        // 四个：日常、有梗、我们俩（或者 TA 出的题），再加一个随便哪档
+        const opts = [];
+        const add = (it) => { if (it && !opts.some((x) => x.w === it.w)) { opts.push(it); return true; } return false; };
+        add(rand(POOL.日常));
+        add(rand(POOL.有梗));
+        const fresh = fromPartner.filter((w) => !usedCustom.has(w));
+        if (fresh.length && Math.random() < 0.6) add({ lane: '我们俩', cat: 'TA 出的题', w: rand(fresh), custom: true });
+        else add(rand(POOL.我们俩));
+        while (opts.length < 4) add(rand(rand([POOL.日常, POOL.有梗, POOL.有梗, POOL.我们俩])));
+        grid.innerHTML = '';
+        for (const it of opts) {
+          const b = document.createElement('button');
+          b.className = 'gold';
+          b.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 6px';
+          b.innerHTML = '<span></span><small style="font-weight:400;font-size:10px;opacity:.7"></small>';
+          b.firstChild.textContent = it.w;
+          b.lastChild.textContent = it.custom ? '💌 TA 出的题' : `${it.lane} · ${it.cat}`;
+          b.onclick = () => { if (it.custom) usedCustom.add(it.w); startRound(it); };
+          grid.appendChild(b);
+        }
+      };
+      o.querySelector('button.ghost').onclick = deal;
+      deal();
     } else {
       overlay(`<div style="font-size:30px">${ctx.icon[drawer]}</div><div style="margin-top:6px">TA 在选题…</div>${lastEndHtml()}`);
     }
