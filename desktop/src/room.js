@@ -1257,10 +1257,22 @@ function drawFurniture(px, t, L, cat, jelly, per, props, spots, objs) {
     const [yx, yy] = P(48, 88, 0);
     px.sprite(['.rr.', 'rRrr', 'rrRr', '.rr.'], yx - 2, yy - 4, { r: hex('#e87a7a'), R: hex('#c45b5b') });
     px.line([yx + 2, yy - 1], [yx + 7, yy + 1], hex('#e87a7a'));
+    // 逗猫的玩具小老鼠（之前是一条灰色小鱼，看起来像真的鱼）
     const [fx, fy] = P(60, 74, 0);
-    px.sprite(['..ggg..g', '.gGgggGg', 'gegggg.g', '.ggggg..'], fx - 4, fy - 4, { g: hex('#9aa7b5'), G: hex('#c4ced8'), e: hex('#2a2a2a') });
-    ellipse(px, ...P(70, 62, 0), 6, 3, hex('#5d8fc9'));
-    ellipse(px, ...P(70, 62, 1), 5, 2, hex('#7aa6dd'));
+    px.sprite([
+      '.pp.......',
+      'pggg......',
+      'gegggg....',
+      'gggggg..t.',
+      '.ggggg.t.t',
+      '..k.k.t...',
+    ], fx - 5, fy - 6, { g: hex('#b8b0c8'), p: hex('#f4a6c0'), e: hex('#2a2a2a'), k: hex('#8a8098'), t: hex('#f4a6c0') });
+    // 小方坐垫（鼓鼓的，中间一个扣子）——之前画成扁扁的蓝椭圆，看起来像一滩水
+    px.shadow(65, 57, 10, 10, 0.18, 1);
+    px.box(65, 57, 0, 10, 10, 2.5, { top: hex('#f2c14a'), left: hex('#d9a536'), right: hex('#c4922c'), edge: hex('#ffe08a') });
+    const [cx3, cy3] = P(70, 62, 2.5);
+    px.set(cx3, cy3, hex('#a8781e'));
+    for (const [dx, dy] of [[-8, 0], [8, 0], [0, -4], [0, 4]]) px.set(cx3 + dx * 0.5, cy3 + dy * 0.5, hex('#e8b440'));
   }
 }
 
